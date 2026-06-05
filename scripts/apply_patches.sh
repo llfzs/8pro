@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-KERNEL_DIR="${KERNEL_DIR:-$ROOT_DIR/third_party/linux-kernel}"
+KERNEL_DIR="${KERNEL_DIR:-$ROOT_DIR/third_party/kernel}"
 PATCH_DIR="${PATCH_DIR:-$ROOT_DIR/device/patches}"
 
 if [ ! -d "$KERNEL_DIR" ]; then

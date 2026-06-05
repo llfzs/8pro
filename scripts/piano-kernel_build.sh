@@ -48,8 +48,15 @@ if [ -n "$CONFIG_PATH" ] && [ -f "$CONFIG_PATH" ]; then
   echo "Using kernel config: $CONFIG_PATH"
   cp "$CONFIG_PATH" .config
 else
-  echo "No external config found, using default defconfig if available"
-  make defconfig ARCH=arm64
+  echo "No external config found. Will attempt 'make defconfig' if supported by this kernel tree."
+  if [ -f Makefile ] && grep -q "defconfig" Makefile; then
+    echo "Kernel Makefile supports defconfig; running 'make defconfig ARCH=arm64'"
+    make defconfig ARCH=arm64
+  else
+    echo "当前内核源码不包含 'defconfig' 目标。请提供一个配置文件并设置 KERNEL_CONFIG_PATH 环境变量，或在仓库中添加一个可被脚本找到的 config*.aarch64 文件。"
+    echo "示例：cp configs/config-postmarketos-qcom-sm8750.aarch64 $PWD/.config 或 设置 KERNEL_CONFIG_PATH=/path/to/config"
+    exit 1
+  fi
 fi
 
 echo "Building kernel with clang..."
