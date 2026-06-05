@@ -30,6 +30,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       KERNEL_REPO: ${{ github.event.inputs.KERNEL_REPO || 'https://github.com/cctv18/oppo_oplus_realme_sm8750' }}
       KERNEL_BRANCH: ${{ github.event.inputs.KERNEL_BRANCH || 'main' }}
@@ -102,6 +104,7 @@ jobs:
       - name: Create GitHub Release and upload artifacts
         uses: ncipollo/release-action@v1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           tag: build-${{ github.run_id }}
           name: Build ${{ github.run_id }}
           artifacts: out/artifacts/boot.img,out/artifacts/rootfs.img,out/artifacts/boot.img.tar.gz,out/artifacts/boot.img.tar.gz
