@@ -101,10 +101,17 @@ jobs:
           chmod +x ./scripts/package_images.sh
           ./scripts/package_images.sh
 
+      - name: Prepare artifacts tarball for release
+        run: |
+          mkdir -p out/artifacts
+          tar -C out/artifacts -czf out/artifacts_all.tar.gz . || true
+          ls -la out || true
+          ls -la out/artifacts || true
+
       - name: Create GitHub Release and upload artifacts
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: build-${{ github.run_id }}
           name: Build ${{ github.run_id }}
-          artifacts: out/artifacts/boot.img,out/artifacts/rootfs.img,out/artifacts/boot.img.tar.gz,out/artifacts/boot.img.tar.gz
+          artifacts: out/boot_piano.img,out/artifacts_all.tar.gz
