@@ -1,0 +1,27 @@
+name: Build Xiaomi Pad 8 Pro
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git debootstrap qemu-user-static
+
+      - name: Make scripts executable
+        run: |
+          chmod +x ./scripts/*.sh
+
+      - name: Run build flow
+        env:
+          DEBIAN_SUITE: bookworm
+          ARCH: arm64
+        run: |
+          ./scripts/build.sh

@@ -1,0 +1,14 @@
+# Build artifacts
+/out
+/build
+/obj
+
+# third-party clones
+/third_party
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# scripts
+*.log
