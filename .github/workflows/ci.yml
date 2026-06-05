@@ -104,6 +104,11 @@ jobs:
       - name: Prepare artifacts tarball for release
         run: |
           mkdir -p out/artifacts
+          # if boot_piano.img exists, copy it into artifacts for inclusion
+          if [ -f out/boot_piano.img ]; then
+            mkdir -p out/artifacts
+            cp out/boot_piano.img out/artifacts/ || true
+          fi
           tar -C out/artifacts -czf out/artifacts_all.tar.gz . || true
           ls -la out || true
           ls -la out/artifacts || true
@@ -114,4 +119,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: build-${{ github.run_id }}
           name: Build ${{ github.run_id }}
-          artifacts: out/boot_piano.img,out/artifacts_all.tar.gz
+          artifacts: out/artifacts_all.tar.gz,out/artifacts/boot_piano.img
