@@ -12,13 +12,16 @@ echo "高层构建脚本：按顺序克隆依赖、提取设备文件、应用�
 
 ./scripts/extract_third_party.sh
 
-# 应用补丁（需要将 KERNEL_DIR 指向 third_party 中的内核源码）
+# 应用补丁（保持兼容）
 ./scripts/apply_patches.sh || true
 
-# 构建内核（需要设置 KERNEL_DIR 和 CROSS_COMPILE）
-./scripts/build_kernel.sh || true
+# 使用 Piano 项目相似的构建流程：内核编译 -> 打包 boot -> 生成 rootfs 镜像
+echo "运行 piano-style 内核构建"
+chmod +x ./scripts/piano-kernel_build.sh
+./scripts/piano-kernel_build.sh || true
 
-# 创建 Debian rootfs（可选）
-./scripts/setup_debian_rootfs.sh || true
+echo "打包 rootfs 和 boot 镜像"
+chmod +x ./scripts/package_images.sh
+./scripts/package_images.sh || true
 
-echo "构建流程结束（占位）。请根据实际内核源码路径与交叉编译链调整环境变量。"
+echo "构建流程结束。产物位于 out/ 和 out/artifacts/。"
