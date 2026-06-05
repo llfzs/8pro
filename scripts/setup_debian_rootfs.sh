@@ -3,8 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ROOTFS_DIR="${ROOTFS_DIR:-$ROOT_DIR/out/rootfs}
-"
+ROOTFS_DIR="${ROOTFS_DIR:-$ROOT_DIR/out/rootfs}"
 DEBIAN_SUITE="${DEBIAN_SUITE:-bookworm}"
 ARCH="${ARCH:-arm64}"
 MIRROR="${MIRROR:-http://deb.debian.org/debian}"
