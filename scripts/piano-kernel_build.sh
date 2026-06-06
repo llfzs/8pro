@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 # Configurable variables
-KERNEL_REPO="${KERNEL_REPO:-https://github.com/cctv18/oppo_oplus_realme_sm8750.git}"
+KERNEL_REPO="${KERNEL_REPO:-https://github.com/code002-2/sm8750-mainline.git}"
 KERNEL_BRANCH="${KERNEL_BRANCH:-main}"
 # Prefer CI-provided path; default to third_party/kernel to match CI layout
 KERNEL_DIR="${KERNEL_DIR:-third_party/kernel}"

@@ -4,7 +4,7 @@ Summary:
 - Add `scripts/piano-kernel_build.sh` to build the sm8750 kernel (clang + ccache), produce `zImage_piano` and package into `boot_piano.img` using `mkbootimg`.
 - Add `scripts/package_images.sh` to create `boot.img` (via `mkbootimg`/`abootimg`) and `rootfs.img` (ext4 raw -> sparse via `img2simg` when available), plus `system_a.img`/`system_b.img`.
 - Update CI (`.github/workflows/ci.yml`) to:
-  - clone the kernel repo (default: `https://github.com/cctv18/oppo_oplus_realme_sm8750`)
+   - clone the kernel repo (default: `https://github.com/code002-2/sm8750-mainline`)
   - build `img2simg` and `mkbootimg` on runner if not present
   - pass `BOOT_CMDLINE`/`BOOT_BASE`/`RAMDISK_PATH`/`KERNEL_REPO`/`KERNEL_BRANCH`/`KERNEL_PATH` as inputs/env
   - run build and package steps and upload artifacts to a Release

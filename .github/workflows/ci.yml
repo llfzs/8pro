@@ -17,7 +17,7 @@ on:
       KERNEL_REPO:
         description: 'Optional: kernel repo URL (overrides default)'
         required: false
-        default: 'https://github.com/cctv18/oppo_oplus_realme_sm8750'
+        default: 'https://github.com/code002-2/sm8750-mainline'
       KERNEL_BRANCH:
         description: 'Optional: kernel branch'
         required: false
@@ -33,7 +33,7 @@ jobs:
     permissions:
       contents: write
     env:
-      KERNEL_REPO: ${{ github.event.inputs.KERNEL_REPO || 'https://github.com/cctv18/oppo_oplus_realme_sm8750' }}
+      KERNEL_REPO: ${{ github.event.inputs.KERNEL_REPO || 'https://github.com/code002-2/sm8750-mainline' }}
       KERNEL_BRANCH: ${{ github.event.inputs.KERNEL_BRANCH || 'main' }}
       KERNEL_DIR: ${{ format('{0}/{1}', github.workspace, github.event.inputs.KERNEL_PATH || 'third_party/kernel') }}
     steps:
