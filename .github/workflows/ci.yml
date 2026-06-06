@@ -21,7 +21,7 @@ on:
       KERNEL_BRANCH:
         description: 'Optional: kernel branch'
         required: false
-        default: 'main'
+        default: 'v6.16'
       KERNEL_PATH:
         description: 'Optional: relative path to clone kernel into (under workspace)'
         required: false
