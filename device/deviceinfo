@@ -1,0 +1,90 @@
+# Xiaomi Pad 8 Pro - postmarketOS device info
+# Based on Qualcomm SM8750-AB (Snapdragon 8 Elite)
+
+# ── Identification ───────────────────────────────
+deviceinfo_name="Xiaomi Pad 8 Pro"
+deviceinfo_manufacturer="Xiaomi"
+deviceinfo_codename="xiaomi-pad8pro"
+deviceinfo_year="2025"
+deviceinfo_chassis="tablet"
+deviceinfo_keyboard="false"
+deviceinfo_external_storage="false"
+deviceinfo_screen_width="3200"
+deviceinfo_screen_height="2136"
+deviceinfo_dev_touchscreen=""
+deviceinfo_dev_touchscreen_calibration=""
+
+# ── Kernel ────────────────────────────────────────
+deviceinfo_kernel_source="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
+deviceinfo_kernel_source_version="v6.12"
+deviceinfo_kernel_cmdline="console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 androidboot.hardware=qcom androidboot.console=ttyMSM0 androidboot.memcg=1 lpm_levels.sleep_disabled=1 video=DSI-1:3200x2136@60"
+deviceinfo_kernel_defconfig="postmarketos-qcom-sm8750"
+deviceinfo_kernel_dtb_vendor="qcom"
+deviceinfo_kernel_dtb_name="xiaomi,pad8pro"
+deviceinfo_kernel_dtb_override=""
+
+# ── Partition layout ──────────────────────────────
+# Xiaomi Pad 8 Pro uses dynamic partitions (super partition)
+deviceinfo_flash_method="fastboot"
+deviceinfo_flash_fastboot_partition_system="system"
+deviceinfo_flash_fastboot_partition_vendor="vendor"
+deviceinfo_flash_fastboot_partition_boot="boot"
+deviceinfo_flash_fastboot_partition_dtbo="dtbo"
+deviceinfo_flash_fastboot_partition_userdata="userdata"
+deviceinfo_flash_fastboot_ab="true"
+
+# A/B slot support
+deviceinfo_has_ab_partition="true"
+deviceinfo_flash_ab_slot="a"
+
+# ── Boot image ────────────────────────────────────
+deviceinfo_bootimg_format="mkbootimg"
+deviceinfo_bootimg_mtk_offset=""
+deviceinfo_bootimg_qcom_offset="0x00000000"
+deviceinfo_bootimg_custom_bootimg=""
+deviceinfo_bootimg_custom_bootimg_format=""
+
+# mkbootimg specific
+deviceinfo_bootimg_vendor_boot="true"
+deviceinfo_page_size="4096"
+deviceinfo_base_address="0x00000000"
+deviceinfo_tags_offset="0x00000100"
+deviceinfo_kernel_offset="0x00008000"
+deviceinfo_ramdisk_offset="0x01000000"
+deviceinfo_second_offset="0x00000000"
+
+# ── Modules ───────────────────────────────────────
+deviceinfo_modules_initfs="msm_drm dwc3 qcom_spmi_pmic phy_qcom_qmp_pcie phy_qcom_qmp_ufs qcom_qusb2_phy ufs_qcom"
+
+# ── Display ───────────────────────────────────────
+deviceinfo_display_driver="mesa"
+deviceinfo_display_margin="0"
+
+# ── USB / Networking ──────────────────────────────
+deviceinfo_usb_mode="gadget"
+deviceinfo_usb_gadget_function="rndis"
+deviceinfo_usb_rndis_mac_address=""
+
+# ── Battery ───────────────────────────────────────
+deviceinfo_battery_type="pm8750"
+
+# ── Architecture ──────────────────────────────────
+deviceinfo_arch="aarch64"
+
+# ── Nonfree firmware ─────────────────────────────
+deviceinfo_nonfree_firmware="qcom-sm8750"
+deviceinfo_nonfree_firmware_files="
+	ath12k/WCN7850/hw2.0/amss.bin
+	ath12k/WCN7850/hw2.0/board-2.bin
+	ath12k/WCN7850/hw2.0/m3.bin
+	qcom/a680_zap.mbn
+"
+
+# ── Additional device info ────────────────────────
+deviceinfo_comment="Bootloader must be unlocked via MiUnlockTool before flashing.
+Use: fastboot flash boot <boot.img>
+     fastboot flash dtbo <dtbo.img>
+WiFi: WCN7850 (ath12k driver)
+GPU: Adreno 830 (freedreno/a680)
+Touch: FocalTech FT8756 (I2C)
+Display: 11.2\" 3200x2136 LCD DSI panel"

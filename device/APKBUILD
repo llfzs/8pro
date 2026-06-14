@@ -1,0 +1,46 @@
+# Contributor: OpenClaw <openclaw@localhost>
+# Maintainer: OpenClaw <openclaw@localhost>
+pkgname=device-xiaomi-pad8pro
+pkgver=1.0.0
+pkgrel=0
+pkgdesc="Xiaomi Pad 8 Pro (SM8750-AB, Snapdragon 8 Elite)"
+url="https://postmarketos.org"
+arch="aarch64"
+license="MIT"
+depends="postmarketos-base linux-postmarketos-qcom-sm8750 mkbootimg mesa-dri-gallium"
+makedepends=""
+install="$pkgname.post-install"
+subpackages="
+	$pkgname-nonfree-firmware:nonfree_firmware
+"
+source="
+	deviceinfo
+	90-device-xiaomi-pad8pro.conf
+	gpd-xiaomi-pad8pro.rules
+	suspend-hook.sh
+"
+options="!check"
+
+build() {
+	default_build
+}
+
+package() {
+	install -Dm644 "$srcdir/deviceinfo" \
+		"$pkgdir/etc/deviceinfo"
+
+	install -Dm644 "$srcdir/90-device-xiaomi-pad8pro.conf" \
+		"$pkgdir/etc/device-xlite/90-device-xiaomi-pad8pro.conf"
+
+	install -Dm644 "$srcdir/gpd-xiaomi-pad8pro.rules" \
+		"$pkgdir/etc/udev/rules.d/90-device-xiaomi-pad8pro.rules"
+
+	install -Dm755 "$srcdir/suspend-hook.sh" \
+		"$pkgdir/etc/pm/sleep.d/50-device-xiaomi-pad8pro"
+}
+
+nonfree_firmware() {
+	pkgdesc="WiFi/BT/GPU firmware for Xiaomi Pad 8 Pro"
+	depends="firmware-qualcomm-sm8750 linux-firmware-qcom"
+	mkdir -p "$subpkgdir"
+}

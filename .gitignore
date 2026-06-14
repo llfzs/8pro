@@ -1,14 +1,19 @@
-# Build artifacts
-/out
-/build
-/obj
+# Build output
+build/
+firmware/
 
-# third-party clones
-/third_party
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+__pycache__/
 
-# OS files
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
 .DS_Store
 Thumbs.db
-
-# scripts
-*.log

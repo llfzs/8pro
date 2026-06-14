@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device tree for Xiaomi Pad 8 Pro (SM8750-AB)
+ *
+ * Based on Qualcomm SM8750 MTP/QRD reference board.
+ * Xiaomi Pad 8 Pro uses Snapdragon 8 Elite (SM8750-AB).
+ */
+
+/dts-v1/;
+
+#include "sm8750.dtsi"
+#include "sm8750-mtp.dtsi"
+
+/ {
+	model = "Xiaomi Pad 8 Pro";
+	compatible = "xiaomi,pad8pro", "qcom,sm8750", "qcom,sm8750-mtp";
+
+	aliases {
+		serial0 = &uart14;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	/* Panel regulator - 1.2V for DSI */
+	panel_vddio: regulator-panel-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vddio";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		gpio = <&tlmm 45 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_vddio_default>;
+	};
+
+	/* Panel reset GPIO */
+	panel_reset: regulator-panel-reset {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_reset";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 46 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_reset_default>;
+	};
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&qupv3_id_1 {
+	status = "okay";
+};
+
+&qupv3_id_2 {
+	status = "okay";
+};
+
+/* UART14 - Debug console */
+&uart14 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart14_default>;
+};
+
+/* I2C for touchscreen */
+&i2c8 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	/* FocalTech FT8756 or similar touch controller */
+	touchscreen@38 {
+		compatible = "focaltech,fts";
+		reg = <0x38>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <75 IRQ_TYPE_EDGE_FALLING>;
+
+		reset-gpios = <&tlmm 76 GPIO_ACTIVE_LOW>;
+
+		vdd-supply = <&panel_vddio>;
+		avdd-supply = <&panel_vddio>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_default>;
+
+		touchscreen-size-x = <3200>;
+		touchscreen-size-y = <2136>;
+		touchscreen-max-pressure = <255>;
+
+		focaltech,panel-coords = <0 0 3200 2136>;
+	};
+};
+
+/* I2C for sensors */
+&i2c12 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	/* Accelerometer + Gyroscope */
+	imu@68 {
+		compatible = "st,lsm6dso";
+		reg = <0x68>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <80 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	/* Magnetometer */
+	magn@0c {
+		compatible = "st,lis2mdl";
+		reg = <0x0c>;
+	};
+};
+
+/* UFS Storage */
+&ufs_mem_hc {
+	status = "okay";
+
+	vdd-supply = <&ldo5>;
+	vddq-supply = <&ldo7>;
+	vcc-supply = <&ldo5>;
+
+	qcom,vdd-voltage-level = <1800000 1800000>;
+	qcom,vddq-voltage-level = <1200000 1200000>;
+	qcom,vcc-voltage-level = <1800000 1800000>;
+};
+
+/* USB */
+&usb0 {
+	status = "okay";
+};
+
+&usb0_dwc3 {
+	dr_mode = "otg";
+	usb-role-switch;
+	role-switch-default-mode = "peripheral";
+};
+
+/* Display - 11.2" 3200x2136 LCD */
+&mdss {
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
+};
+
+&dsi0 {
+	status = "okay";
+
+	vddio-supply = <&panel_vddio>;
+
+	panel@0 {
+		compatible = "xiaomi,pad8pro-panel", "panel-mdss-dsi";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_reset_default>;
+
+		vddio-supply = <&panel_vddio>;
+
+		display-timings {
+			timing-0 {
+				clock-frequency = <600000000>;
+				hactive = <3200>;
+				vactive = <2136>;
+				hfront-porch = <40>;
+				hback-porch = <40>;
+				hsync-len = <4>;
+				vfront-porch = <8>;
+				vback-porch = <8>;
+				vsync-len = <4>;
+			};
+		};
+	};
+};
+
+/* GPU - Adreno 830 */
+&gpu {
+	status = "okay";
+};
+
+/* WiFi / BT (WCN7850 via PCIe) */
+&pcie0 {
+	status = "okay";
+
+	perst-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
+	enable-gpios = <&tlmm 99 GPIO_ACTIVE_HIGH>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_default>;
+};
+
+/* Sound */
+&qupv3_id_0 {
+	slim@98c000 {
+		status = "okay";
+
+		wcd9395: codec@1,0 {
+			compatible = "qcom,wcd9395-codec";
+			reg = <1 0>;
+		};
+	};
+};
+
+&pinctrl {
+	panel_vddio_default: panel-vddio-default {
+		pins = "gpio45";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	panel_reset_default: panel-reset-default {
+		pins = "gpio46";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	ts_default: ts-default {
+		pins = "gpio75", "gpio76";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
+	uart14_default: uart14-default {
+		pins = "gpio42", "gpio43";
+		function = "qup_se5_uart";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	pcie0_default: pcie0-default {
+		pins = "gpio99", "gpio100";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+/* PMIC battery/charging */
+&pm8750_adc_tm {
+	status = "okay";
+};
+
+&pm8750_bms {
+	status = "okay";
+};
+
+&pm8750_charger {
+	status = "okay";
+	qcom,fast-charge-current-limit = <6700000>;
+	qcom,fast-charge-battery-voltage-limit = <4480>;
+};

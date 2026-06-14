@@ -1,0 +1,268 @@
+name: Build Xiaomi Pad 8 Pro Linux
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            device-tree-compiler bc bison flex libssl-dev \
+            python3 cpio gzip wget curl e2fsprogs xz-utils \
+            qemu-user-static
+
+      - name: Cache Linux kernel source
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: build/linux
+          key: linux-v6.12-shallow
+
+      - name: Download Linux kernel
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build
+          git clone --depth=1 -b v6.12 \
+            https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git \
+            build/linux
+
+      - name: Build kernel
+        run: |
+          KSRC=build/linux
+          KOUT=build/kout
+
+          # 拷贝设备树
+          cp dt/xiaomi,pad8pro.dts "$KSRC/arch/arm64/boot/dts/qcom/"
+          grep -q "xiaomi,pad8pro" "$KSRC/arch/arm64/boot/dts/qcom/Makefile" || \
+            echo 'dtb-$(CONFIG_ARCH_SM8750) += xiaomi,pad8pro.dtb' >> \
+              "$KSRC/arch/arm64/boot/dts/qcom/Makefile"
+
+          cd "$KSRC"
+
+          # 配置
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig O=../../kout
+          cat ../../device/kernel.config.fragment >> ../../kout/.config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig O=../../kout
+
+          # 编译
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) \
+            Image dtbs modules O=../../kout
+
+          # 安装模块
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            modules_install INSTALL_MOD_PATH=../../modules O=../../kout
+
+          cd ../..
+          cp kout/arch/arm64/boot/Image build/
+          cp kout/arch/arm64/boot/dts/qcom/xiaomi,pad8pro.dtb build/ 2>/dev/null || \
+            cp kout/arch/arm64/boot/dts/qcom/*.dtb build/ 2>/dev/null || true
+
+      - name: Build boot.img
+        run: |
+          set -e
+          KIMG=build/Image
+          DTB=build/xiaomi,pad8pro.dtb
+          INIT=build/initramfs-root
+          mkdir -p build/output
+
+          # initramfs
+          rm -rf "$INIT"
+          mkdir -p "$INIT"/{bin,dev,etc,lib,mnt/rootfs,proc,sys}
+
+          # busybox
+          wget -q "https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox" \
+            -O build/busybox || cp /bin/busybox build/busybox
+          cp build/busybox "$INIT/bin/busybox"
+          chmod +x "$INIT/bin/busybox"
+          for cmd in sh mount umount mkdir cat echo ls modprobe switch_root; do
+            ln -sf busybox "$INIT/bin/$cmd"
+          done
+
+          # 内核模块
+          if [ -d build/modules/lib/modules ]; then
+            cp -a build/modules/lib/modules "$INIT/lib/"
+          fi
+
+          # init
+          cat > "$INIT/init" << 'INITEOF'
+          #!/bin/sh
+          export PATH=/bin
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          mount -t devtmpfs devtmpfs /dev
+          mount -t tmpfs tmpfs /run
+          for m in msm_drm phy_qcom_qmp_ufs ufs_qcom dwc3; do
+            modprobe "$m" 2>/dev/null
+          done
+          for i in $(seq 1 30); do
+            [ -b /dev/sda ] || [ -b /dev/sdb ] && break
+            sleep 0.2
+          done
+          ROOT=""
+          for p in /dev/sda2 /dev/sdb2 /dev/sda3 /dev/sdb3; do
+            [ -b "$p" ] && ROOT="$p" && break
+          done
+          [ -z "$ROOT" ] && echo "no rootfs" && exec /bin/sh
+          mount -t ext4 -o ro "$ROOT" /mnt/rootfs 2>/dev/null || \
+          mount -t f2fs -o ro "$ROOT" /mnt/rootfs 2>/dev/null || \
+            { echo "mount failed"; exec /bin/sh; }
+          umount /proc /sys /dev /run 2>/dev/null
+          exec switch_root /mnt/rootfs /sbin/init
+          INITEOF
+          chmod +x "$INIT/init"
+
+          # 打包 initramfs
+          cd "$INIT"
+          find . | cpio -o -H newc 2>/dev/null | gzip > ../../build/initramfs.gz
+          cd ../..
+
+          # 合并 Image + DTB
+          cat "$KIMG" > build/Image-dtb
+          if [ -f "$DTB" ]; then cat "$DTB" >> build/Image-dtb; fi
+
+          # mkbootimg
+          python3 << 'PYEOF'
+          import struct, hashlib
+
+          with open("build/Image-dtb", "rb") as f:
+              kernel = f.read()
+          with open("build/initramfs.gz", "rb") as f:
+              ramdisk = f.read()
+
+          page = 4096
+          def align(n):
+              return ((n + page - 1) // page) * page
+
+          hdr = bytearray(page)
+          hdr[0:8] = b"ANDROID!"
+          struct.pack_into("<I", hdr, 8, len(kernel))
+          struct.pack_into("<I", hdr, 12, 0x00008000)
+          struct.pack_into("<I", hdr, 16, len(ramdisk))
+          struct.pack_into("<I", hdr, 20, 0x01000000)
+          struct.pack_into("<I", hdr, 32, 0x00000100)
+          struct.pack_into("<I", hdr, 36, page)
+          struct.pack_into("<I", hdr, 40, 0)
+          cmdline = b"console=ttyMSM0,115200n8 console=tty0 androidboot.hardware=qcom"
+          hdr[64:64+len(cmdline)] = cmdline
+          sha = hashlib.sha256(kernel + ramdisk).digest()
+          hdr[160:160+32] = sha
+
+          with open("build/output/boot.img", "wb") as f:
+              f.write(bytes(hdr))
+              f.write(kernel)
+              f.write(b"\0" * (align(len(kernel)) - len(kernel)))
+              f.write(ramdisk)
+              f.write(b"\0" * (align(len(ramdisk)) - len(ramdisk)))
+          print("boot.img done")
+          PYEOF
+
+      - name: Build rootfs.img
+        run: |
+          set -e
+          RFS=build/rootfs
+          IMG=build/output/rootfs.img
+          SIZE=2048
+          mkdir -p build/output
+
+          rm -rf "$RFS"
+          mkdir -p "$RFS"
+
+          # Alpine minirootfs
+          wget -q "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz" \
+            -O build/alpine-minirootfs.tar.gz
+          tar -xzf build/alpine-minirootfs.tar.gz -C "$RFS"
+
+          # 内核模块
+          if [ -d build/modules/lib/modules ]; then
+            cp -a build/modules/lib/modules "$RFS/lib/"
+          fi
+
+          # 配置
+          echo "nameserver 8.8.8.8" > "$RFS/etc/resolv.conf"
+          echo "pad8pro" > "$RFS/etc/hostname"
+
+          cat > "$RFS/etc/fstab" << 'FSTABEOF'
+          /dev/sda2   /        ext4   defaults,noatime   0 1
+          tmpfs       /tmp     tmpfs  defaults,noatime   0 0
+          tmpfs       /run     tmpfs  defaults,noatime   0 0
+          FSTABEOF
+
+          cat > "$RFS/etc/inittab" << 'INITTABEOF'
+          ::sysinit:/sbin/openrc sysinit
+          ::sysinit:/bin/mount -t proc proc /proc 2>/dev/null
+          ::sysinit:/bin/mount -t devtmpfs devtmpfs /dev 2>/dev/null
+          ::sysinit:/bin/mount -t tmpfs tmpfs /run 2>/dev/null
+          ::sysinit:/bin/mount -t sysfs sysfs /sys 2>/dev/null
+          ttyMSM0::respawn:/sbin/agetty -L ttyMSM0 115200 vt100
+          tty1::respawn:/sbin/agetty --noclear tty1 115200 linux
+          ::once:/bin/login -f root
+          INITTABEOF
+
+          # chroot 安装包
+          sudo cp /usr/bin/qemu-aarch64-static "$RFS/usr/bin/"
+          sudo chroot "$RFS" /bin/sh -c '
+          export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+          apk update
+          apk add --no-cache \
+            openrc eudev kmod util-linux e2fsprogs \
+            wireless-tools wpa_supplicant iw iproute2 dhcpcd \
+            openssh bash vim htop mesa-dri-gallium alsa-utils \
+            networkmanager
+          rc-update add networking default
+          rc-update add sshd default
+          rc-update add udev sysinit
+          rc-update add udev-trigger sysinit
+          rc-update add networkmanager default
+          echo "root:" | chpasswd -e
+          '
+
+          # 打包
+          dd if=/dev/zero of="$IMG" bs=1M count="$SIZE" status=progress
+          sudo mkfs.ext4 -q -L rootfs -d "$RFS" "$IMG"
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "tag=build-$(date +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Xiaomi Pad 8 Pro Linux ${{ steps.version.outputs.date }}"
+          body: |
+            ## Xiaomi Pad 8 Pro - Linux Build
+
+            - **Kernel**: Linux 6.12 (SM8750-AB)
+            - **Rootfs**: Alpine Linux 3.21 aarch64
+            - **Display**: Framebuffer console (屏幕+串口)
+            - **Build**: ${{ github.sha }}
+
+            ### 刷入方法
+            ```
+            adb reboot bootloader
+            fastboot flash boot boot.img
+            fastboot flash userdata rootfs.img
+            fastboot set_active a
+            fastboot reboot
+            ```
+          files: |
+            build/output/boot.img
+            build/output/rootfs.img
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
