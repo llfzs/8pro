@@ -317,9 +317,9 @@ EOF
 
     # chroot 安装包（需要 qemu-aarch64-static）
     if [ -f /usr/bin/qemu-aarch64-static ]; then
-        cp /usr/bin/qemu-aarch64-static "$RFS/usr/bin/"
+        ${SUDO_CMD} cp /usr/bin/qemu-aarch64-static "$RFS/usr/bin/" 2>/dev/null || true
         log "chroot 安装系统包..."
-        chroot "$RFS" /bin/sh -c '
+        ${SUDO_CMD} chroot "$RFS" /bin/sh -c '
             export PATH=/usr/sbin:/usr/bin:/sbin:/bin
             apk update
             apk add --no-cache \
@@ -333,7 +333,7 @@ EOF
             rc-update add udev-trigger sysinit 2>/dev/null
             rc-update add networkmanager default 2>/dev/null
             echo "root:" | chpasswd -e
-        ' 2>&1 | tail -5
+        ' 2>&1 | tail -5 || true
     else
         warn "无 qemu-aarch64-static，跳过 chroot，首次启动时安装"
     fi
