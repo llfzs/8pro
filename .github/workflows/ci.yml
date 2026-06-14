@@ -89,6 +89,7 @@ jobs:
           BOOT_CMDLINE: ${{ github.event.inputs.BOOT_CMDLINE || '' }}
           BOOT_BASE: ${{ github.event.inputs.BOOT_BASE || '' }}
           RAMDISK_PATH: ${{ github.event.inputs.RAMDISK_PATH || '' }}
+          SKIP_DEPS: '1'
         run: |
           ./scripts/build.sh
 

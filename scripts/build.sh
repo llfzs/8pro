@@ -14,6 +14,16 @@ err()  { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 
 mkdir -p "$BUILD" "$OUT"
 
+# 在非 root 环境下尝试使用 sudo（若没有 sudo 则在需要时给出提示）
+SUDO_CMD=""
+if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+        SUDO_CMD="sudo"
+    else
+        SUDO_CMD=""
+    fi
+fi
+
 # ─── 固件 ─────────────────────────────────────────────────
 extract_firmware() {
     local FW="$BUILD/firmware"
@@ -55,15 +65,23 @@ extract_firmware() {
 # ─── 1. 依赖 ───────────────────────────────────────────────
 install_deps() {
     log "安装构建依赖..."
-    apt-get update -qq
-    apt-get install -y -qq \
+    if [ "${SKIP_DEPS:-0}" = "1" ]; then
+        log "SKIP_DEPS=1，跳过依赖安装"
+        return
+    fi
+    ${SUDO_CMD} apt-get update -qq
+    ${SUDO_CMD} apt-get install -y -qq \
         gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
         device-tree-compiler bc bison flex libssl-dev \
         python3 python3-pip wget curl cpio gzip \
         qemu-user-static e2fsprogs parted xz-utils \
         2>/dev/null
-
-    pip3 install pmbootstrap 2>/dev/null || true
+    # 在需要时使用 sudo 安装 python 包（若有 sudo）
+    if [ -n "${SUDO_CMD}" ]; then
+        ${SUDO_CMD} pip3 install pmbootstrap 2>/dev/null || true
+    else
+        pip3 install --user pmbootstrap 2>/dev/null || true
+    fi
     log "依赖就绪"
 }
 
