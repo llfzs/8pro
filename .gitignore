@@ -1,6 +1,5 @@
 # Build output
 build/
-firmware/
 
 # Temporary files
 *.tmp
