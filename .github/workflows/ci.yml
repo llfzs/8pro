@@ -93,14 +93,20 @@ jobs:
             echo "mkbootimg source not found; proceeding without mkbootimg"
           fi
 
+      - name: Resolve kernel commit
+        id: kernel-commit
+        run: |
+          commit=$(git ls-remote "$KERNEL_REPO" "$KERNEL_BRANCH" | awk '{print $1}' | head -n1)
+          echo "commit=$commit" >> $GITHUB_OUTPUT
+
       - name: Cache kernel source
         id: cache-kernel
         uses: actions/cache@v4
         with:
           path: ${{ env.KERNEL_DIR }}
-          key: kernel-${{ env.KERNEL_BRANCH }}-shallow
+          key: kernel-${{ steps.kernel-commit.outputs.commit }}-shallow
           restore-keys: |
-            kernel-${{ env.KERNEL_BRANCH }}-
+            kernel-${{ steps.kernel-commit.outputs.commit }}-
             kernel-
 
       - name: Clone kernel source
@@ -113,7 +119,7 @@ jobs:
         id: cache-ccache
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
+          path: ${{ github.workspace }}/.ccache
           key: ccache-${{ runner.os }}-v1
 
       - name: Restore kernel build outputs
@@ -128,20 +134,32 @@ jobs:
             kernel-kout-${{ env.KERNEL_BRANCH }}-
             kernel-kout-
 
-      - name: Run build flow
+      - name: Build kernel
         env:
           DEBIAN_SUITE: bookworm
           ARCH: arm64
           KERNEL_DIR: ${{ github.workspace }}/third_party/kernel
-          BOOT_CMDLINE: ${{ github.event.inputs.BOOT_CMDLINE || '' }}
-          BOOT_BASE: ${{ github.event.inputs.BOOT_BASE || '' }}
-          RAMDISK_PATH: ${{ github.event.inputs.RAMDISK_PATH || '' }}
           SKIP_DEPS: '1'
         run: |
-          # enable ccache wrappers and set ccache dir
           export PATH="/usr/lib/ccache:$PATH"
           export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
-          ./scripts/build.sh
+          ./scripts/build.sh kernel
+
+      - name: Build boot image
+        env:
+          SKIP_DEPS: '1'
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
+          ./scripts/build.sh boot
+
+      - name: Build rootfs image
+        env:
+          SKIP_DEPS: '1'
+        run: |
+          export PATH="/usr/lib/ccache:$PATH"
+          export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
+          ./scripts/build.sh rootfs
 
       - name: Package boot and rootfs artifacts
         env:

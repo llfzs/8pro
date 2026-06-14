@@ -341,7 +341,12 @@ EOF
     # 打包 img
     log "打包 rootfs.img (${SIZE}MB)..."
     dd if=/dev/zero of="$IMG" bs=1M count="$SIZE" status=none
-    mkfs.ext4 -q -L rootfs -d "$RFS" "$IMG"
+    # 使用 sudo 创建文件系统以便设置权限/所有权（CI 环境通常需要）
+    if [ -n "${SUDO_CMD}" ]; then
+        ${SUDO_CMD} mkfs.ext4 -q -L rootfs -d "$RFS" "$IMG"
+    else
+        mkfs.ext4 -q -L rootfs -d "$RFS" "$IMG"
+    fi
 
     log "rootfs.img 就绪: $(du -h "$IMG" | cut -f1)"
 }
