@@ -42,8 +42,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git debootstrap qemu-user-static abootimg e2fsprogs cpio android-tools-fastboot build-essential zlib1g-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            device-tree-compiler bc bison flex libssl-dev libncurses-dev \
+            python3 python3-pip wget curl cpio gzip e2fsprogs xz-utils \
+            qemu-user-static debootstrap abootimg android-tools-fastboot build-essential zlib1g-dev parted \
+            2>/dev/null
 
       - name: Make scripts executable
         run: |

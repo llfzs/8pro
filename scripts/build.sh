@@ -8,8 +8,9 @@ BUILD="$DIR/build"
 OUT="$DIR/build/output"
 DEVICE="xiaomi-pad8pro"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[+]${NC} $*"; }
+warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 
 mkdir -p "$BUILD" "$OUT"
@@ -68,6 +69,10 @@ install_deps() {
     if [ "${SKIP_DEPS:-0}" = "1" ]; then
         log "SKIP_DEPS=1，跳过依赖安装"
         return
+    fi
+    # 如果既不是 root 且没有 sudo，可提示用户以 sudo 运行
+    if [ "$(id -u)" -ne 0 ] && [ -z "${SUDO_CMD}" ]; then
+        err "需要 root 或 sudo 来安装依赖。请使用 'sudo ./scripts/build.sh deps' 或在 CI 中设置 SKIP_DEPS=1。"
     fi
     ${SUDO_CMD} apt-get update -qq
     ${SUDO_CMD} apt-get install -y -qq \
