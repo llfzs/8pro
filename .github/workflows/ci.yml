@@ -40,12 +40,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare apt cache dir
+        run: mkdir -p "${GITHUB_WORKSPACE}/.apt-cache"
+
+      - name: Cache apt packages
+        id: cache-apt
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.apt-cache
+          key: apt-cache-${{ runner.os }}-v1
+
       - name: Install dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
+          sudo apt-get -o Dir::Cache::archives="${GITHUB_WORKSPACE}/.apt-cache" update -qq
+          sudo apt-get -o Dir::Cache::archives="${GITHUB_WORKSPACE}/.apt-cache" install -y -qq \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             device-tree-compiler bc bison flex libssl-dev libncurses-dev \
+            ccache \
             python3 python3-pip wget curl cpio gzip e2fsprogs xz-utils \
             qemu-user-static debootstrap abootimg android-tools-fastboot build-essential zlib1g-dev parted \
             2>/dev/null
@@ -82,9 +93,40 @@ jobs:
             echo "mkbootimg source not found; proceeding without mkbootimg"
           fi
 
+      - name: Cache kernel source
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.KERNEL_DIR }}
+          key: kernel-${{ env.KERNEL_BRANCH }}-shallow
+          restore-keys: |
+            kernel-${{ env.KERNEL_BRANCH }}-
+            kernel-
+
       - name: Clone kernel source
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
         run: |
+          mkdir -p "$(dirname \"$KERNEL_DIR\")"
           git clone --depth 1 --branch "$KERNEL_BRANCH" "$KERNEL_REPO" "$KERNEL_DIR"
+
+      - name: Cache ccache
+        id: cache-ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-v1
+
+      - name: Restore kernel build outputs
+        id: cache-kout
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/kout
+            build/modules
+          key: kernel-kout-${{ env.KERNEL_BRANCH }}-v1
+          restore-keys: |
+            kernel-kout-${{ env.KERNEL_BRANCH }}-
+            kernel-kout-
 
       - name: Run build flow
         env:
@@ -96,6 +138,9 @@ jobs:
           RAMDISK_PATH: ${{ github.event.inputs.RAMDISK_PATH || '' }}
           SKIP_DEPS: '1'
         run: |
+          # enable ccache wrappers and set ccache dir
+          export PATH="/usr/lib/ccache:$PATH"
+          export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
           ./scripts/build.sh
 
       - name: Package boot and rootfs artifacts
