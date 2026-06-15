@@ -10,7 +10,7 @@ mkdir -p "$OUT"
 
 # copy kernel boot image(s)
 if [ -f "$BUILD/output/boot.img" ]; then
-    cp "$BUILD/output/boot.img" "$OUT/boot.img" || true
+    # cp "$BUILD/output/boot.img" "$OUT/boot.img" || true
     cp "$BUILD/output/boot.img" "$OUT/boot_piano.img" || true
 fi
 
