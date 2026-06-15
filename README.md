@@ -1,6 +1,6 @@
-# xiaomi-pad-8pro-linux
+# 8pro
 
-基于以下参考仓库，为 Xiaomi Pad 8 Pro 创建的 Linux 支持项目骨架：
+基于以下参考仓库，为 8 Pro 创建的 Linux 支持项目骨架：
 
 - https://github.com/adontoo/device_xiaomi_sm8750_OFRP
 - https://github.com/AviderMin/ofrp_device_xiaomi_piano
@@ -8,7 +8,7 @@
 - https://github.com/code002-2/Xiaomi-pad-6s-pro-Linux/
 
 本项目目标：
-- 汇总参考仓库中的设备树、补丁和构建脚本，搭建面向 Xiaomi Pad 8 Pro 的 Linux 构建流程。
+- 汇总参考仓库中的设备树、补丁和构建脚本，搭建面向 8 Pro 的 Linux 构建流程。
 - 提供可复制的克隆与构建脚本，方便在 CI 或本地复现。
 
 快速开始：
