@@ -134,6 +134,23 @@ build_kernel() {
     log "内核编译完成"
 }
 
+# ─── 打包内核产物（供 CI 发布） ─────────────────────────────────────
+package_kernel() {
+    log "打包内核产物..."
+    mkdir -p "$BUILD/artifacts"
+    # 拷贝 Image
+    [ -f "$BUILD/Image" ] && cp -a "$BUILD/Image" "$BUILD/artifacts/" || true
+    # 拷贝 dtb
+    cp -a "$BUILD"/*.dtb "$BUILD/artifacts/" 2>/dev/null || true
+    # 拷贝模块
+    if [ -d "$BUILD/modules" ]; then
+        cp -a "$BUILD/modules" "$BUILD/artifacts/"
+    fi
+    mkdir -p "$OUT"
+    tar -C "$BUILD/artifacts" -czf "$OUT/kernel-artifacts.tar.gz" .
+    log "内核包生成: $OUT/kernel-artifacts.tar.gz"
+}
+
 # ─── 3. boot.img ──────────────────────────────────────────
 build_boot() {
     log "构建 boot.img..."
@@ -371,6 +388,7 @@ case "${1:-all}" in
     deps)     install_deps ;;
     firmware) extract_firmware ;;
     kernel)   build_kernel ;;
+    package-kernel) package_kernel ;;
     boot)     build_boot ;;
     rootfs)   build_rootfs ;;
     all)
@@ -388,5 +406,5 @@ case "${1:-all}" in
         echo "      fastboot flash userdata $OUT/rootfs.img"
         ;;
     clean)    rm -rf "$BUILD"; log "已清理" ;;
-    *)        echo "用法: $0 {all|deps|kernel|boot|rootfs|clean}" ;;
+    *)        echo "用法: $0 {all|deps|kernel|package-kernel|boot|rootfs|clean}" ;;
 esac

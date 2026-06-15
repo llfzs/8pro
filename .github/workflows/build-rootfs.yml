@@ -1,0 +1,61 @@
+name: Build Rootfs (download kernel from release)
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_tag:
+        description: 'Kernel release tag'
+        required: false
+        default: 'kernel-latest'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-rootfs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq curl tar wget xz-utils qemu-user-static
+
+      - name: Download kernel artifacts from release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.kernel_tag || 'kernel-latest' }}
+        run: |
+          set -e
+          OWNER_REPO="${GITHUB_REPOSITORY}"
+          OWNER=$(echo $OWNER_REPO | cut -d'/' -f1)
+          REPO=$(echo $OWNER_REPO | cut -d'/' -f2)
+          echo "Fetching release $TAG from $OWNER/$REPO"
+          release_json=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$OWNER/$REPO/releases/tags/$TAG")
+          if echo "$release_json" | jq -e . >/dev/null 2>&1; then
+            asset_id=$(echo "$release_json" | jq -r '.assets[] | select(.name | test("kernel-artifacts")) | .id' | head -n1)
+          else
+            echo "Failed to fetch release info" >&2
+            echo "$release_json" >&2
+            exit 1
+          fi
+          if [ -z "$asset_id" ] || [ "$asset_id" = "null" ]; then
+            echo "kernel-artifacts asset not found in release $TAG" >&2
+            echo "Available assets:" >&2
+            echo "$release_json" | jq -r '.assets[].name' >&2
+            exit 1
+          fi
+          echo "Downloading asset id $asset_id"
+          curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/$OWNER/$REPO/releases/assets/$asset_id" -o kernel-artifacts.tar.gz
+          mkdir -p build
+          tar -xzf kernel-artifacts.tar.gz -C build
+
+      - name: Build rootfs
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh rootfs
