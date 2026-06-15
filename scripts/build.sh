@@ -338,6 +338,14 @@ EOF
         warn "无 qemu-aarch64-static，跳过 chroot，首次启动时安装"
     fi
 
+    # 根据实际内容动态计算镜像大小
+    # 内容大小 + 20% 余量 + 64MB 文件系统开销，最小 256MB
+    local CONTENT_MB
+    CONTENT_MB=$(du -sm "$RFS" | awk '{print $1}')
+    local SIZE=$(( (CONTENT_MB * 120 / 100) + 64 ))
+    [ "$SIZE" -lt 256 ] && SIZE=256
+    log "rootfs 内容: ${CONTENT_MB}MB → 镜像大小: ${SIZE}MB"
+
     # 打包 img
     log "打包 rootfs.img (${SIZE}MB)..."
     dd if=/dev/zero of="$IMG" bs=1M count="$SIZE" status=none
