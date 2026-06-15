@@ -1,4 +1,4 @@
-name: Build Rootfs (download kernel from release)
+name: Build Rootfs
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-rootfs:
@@ -55,7 +55,24 @@ jobs:
           mkdir -p build
           tar -xzf kernel-artifacts.tar.gz -C build
 
-      - name: Build rootfs
+      - name: Build boot.img and rootfs.img
         run: |
           chmod +x scripts/build.sh
+          ./scripts/build.sh boot
           ./scripts/build.sh rootfs
+
+      - name: Compress artifacts
+        run: |
+          gzip -k build/output/boot.img
+          gzip -k build/output/rootfs.img
+          ls -lh build/output/boot.img.gz build/output/rootfs.img.gz
+
+      - name: Create/Update release and upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: rootfs-latest
+          artifacts: build/output/boot.img.gz,build/output/rootfs.img.gz
+          allowUpdates: true
+          replacesArtifacts: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
