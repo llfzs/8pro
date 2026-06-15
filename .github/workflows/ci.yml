@@ -188,4 +188,4 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: build-${{ github.run_id }}
           name: Build ${{ github.run_id }}
-          artifacts: out/artifacts_all.tar.gz,out/artifacts/boot_piano.img
+          artifacts: out/artifacts_all.tar.gz,out/artifacts/boot_piano.img,out/artifacts/rootfs.img
