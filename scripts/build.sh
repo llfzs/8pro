@@ -355,6 +355,11 @@ EOF
         warn "无 qemu-aarch64-static，跳过 chroot，首次启动时安装"
     fi
 
+    # 新增：给所有目录添加读权限，解决后续 du 遍历失败
+    ${SUDO_CMD} chmod -R u+rX "$RFS" 2>/dev/null || true
+    # 针对系统私有目录单独放行
+    ${SUDO_CMD} chmod -R 755 "$RFS/var/lib/" 2>/dev/null || true
+    
     # 根据实际内容动态计算镜像大小，屏蔽权限错误
     local CONTENT_MB
     CONTENT_MB=$(du -sm "$RFS" 2>/dev/null | awk '{print $1}')
