@@ -103,10 +103,10 @@ build_kernel() {
             https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git "$KSRC"
     fi
 
-    # 拷贝设备树并加入编译 Makefile
+    # 拷贝设备树并加入编译 Makefile（使用 dtb-y 无条件构建，避免依赖配置变量）
     cp "$DIR/dt/xiaomi,pad8pro.dts" "$KSRC/arch/arm64/boot/dts/qcom/"
     grep -q "xiaomi,pad8pro" "$KSRC/arch/arm64/boot/dts/qcom/Makefile" 2>/dev/null || \
-        echo 'dtb-$(CONFIG_ARCH_SM8750) += xiaomi,pad8pro.dtb' >> \
+        echo 'dtb-y += xiaomi,pad8pro.dtb' >> \
             "$KSRC/arch/arm64/boot/dts/qcom/Makefile"
 
     cd "$KSRC"
@@ -129,6 +129,10 @@ build_kernel() {
     log "编译内核 ($(nproc) 并行任务)..."
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) \
         Image dtbs modules O="$BUILD/kout"
+
+    # 列出生成的 dtb 以供调试（CI 日志可见）
+    echo "DTBs generated in kernel output:" 
+    ls -l "$BUILD/kout/arch/arm64/boot/dts/qcom/"*.dtb || true
 
     # 安装模块
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \

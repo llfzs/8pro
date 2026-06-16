@@ -86,27 +86,54 @@ jobs:
           # 尝试在任何子目录中查找 Image / Image.gz / vmlinuz* 和 dtb
           IMAGE_PATH=$(find build -type f \( -name 'Image' -o -name 'Image.gz' -o -name 'vmlinuz*' \) -print -quit || true)
           DTB_PATH=$(find build -type f -name '*.dtb' -print -quit || true)
-          if [[ -z "$IMAGE_PATH" || -z "$DTB_PATH" ]]; then
-            echo "::error::Kernel archive missing Image/dtb file!"
+
+          # 必须至少包含内核映像，否则失败
+          if [[ -z "$IMAGE_PATH" ]]; then
+            echo "::error::Kernel archive missing Image file!"
             echo "Available files under build:" 
             find build -type f -print || true
             exit 1
           fi
+
+          # 如果未包含任何 dtb，则尝试使用仓库中的 dts 编译一个 dtb 作为回退
+          if [[ -z "$DTB_PATH" ]]; then
+            echo "No dtb found inside kernel archive, attempting to compile dt/xiaomi,pad8pro.dts"
+            if [[ -f dt/xiaomi,pad8pro.dts ]]; then
+              dtc -I dts -O dtb -o build/xiaomi,pad8pro.dtb dt/xiaomi,pad8pro.dts || {
+                echo "::error::dtc failed to compile dtb from dt/xiaomi,pad8pro.dts"
+                echo "Available files under build:" 
+                find build -type f -print || true
+                exit 1
+              }
+              DTB_PATH=build/xiaomi,pad8pro.dtb
+              echo "Compiled fallback dtb -> $DTB_PATH"
+            else
+              echo "::error::Kernel archive missing dtb and dt/xiaomi,pad8pro.dts not found in repo"
+              echo "Available files under build:" 
+              find build -type f -print || true
+              exit 1
+            fi
+          fi
+
           # 如果找到的是压缩的 Image，解压到 build/Image 以供后续使用
           if [[ "$IMAGE_PATH" == *.gz ]]; then
             echo "Decompressing $IMAGE_PATH to build/Image"
             gzip -dc "$IMAGE_PATH" > build/Image
             IMAGE_PATH=build/Image
           fi
+
           # 确保最终内核镜像位于 build/Image，便于后续脚本直接使用
           if [[ "$IMAGE_PATH" != "build/Image" ]]; then
             cp "$IMAGE_PATH" build/Image 2>/dev/null || true
             IMAGE_PATH=build/Image
           fi
-          # 确保 device 特定 dtb 名称存在于 build 根目录
+
+          # 确保 device 特定 dtb 名称存在于 build 根目录（若 DTB_PATH 指向别名则复制）
           if [[ ! -f build/xiaomi,pad8pro.dtb ]]; then
             cp "$DTB_PATH" build/xiaomi,pad8pro.dtb 2>/dev/null || true
+            DTB_PATH=build/xiaomi,pad8pro.dtb
           fi
+
           echo "Kernel extract complete: Image at $IMAGE_PATH, dtb example: $DTB_PATH"
 
       # 5. 执行构建脚本
