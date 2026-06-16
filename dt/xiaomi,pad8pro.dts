@@ -10,17 +10,23 @@
 
 #include "sm8750.dtsi"
 #include "sm8750-mtp.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 
 / {
 	model = "Xiaomi Pad 8 Pro";
 	compatible = "xiaomi,pad8pro", "qcom,sm8750", "qcom,sm8750-mtp";
+
+	#address-cells = <2>;
+	#size-cells = <2>;
 
 	aliases {
 		serial0 = &uart14;
 	};
 
 	chosen {
-		stdout-path = "serial0:115200n8";
+		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
+		stdout-path = &framebuffer0;
 	};
 
 	/* Panel regulator - 1.2V for DSI */
@@ -48,10 +54,43 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&panel_reset_default>;
 	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* 启动帧缓冲内存预留：与Bootloader连续显存地址对齐，适配3200x2136分辨率 */
+		fb_mem: framebuffer@9c000000 {
+			reg = <0x0 0x9c000000 0x0 0x02000000>;
+			no-map;
+		};
+	};
+
+	/* 早期简单帧缓冲：启动阶段屏幕输出内核日志，无需等待原生DSI面板驱动加载 */
+	framebuffer0: framebuffer@9c000000 {
+		compatible = "simple-framebuffer";
+		reg = <0x0 0x9c000000 0x0 0x02000000>;
+		width = <3200>;
+		height = <2136>;
+		stride = <12800>;
+		format = "a8r8g8b8";
+		status = "okay";
+	};
 };
 
 &qupv3_id_0 {
 	status = "okay";
+
+	/* Sound */
+	slim@98c000 {
+		status = "okay";
+
+		wcd9395: codec@1,0 {
+			compatible = "qcom,wcd9395-codec";
+			reg = <1 0>;
+		};
+	};
 };
 
 &qupv3_id_1 {
@@ -200,15 +239,14 @@
 	pinctrl-0 = <&pcie0_default>;
 };
 
-/* Sound */
-&qupv3_id_0 {
-	slim@98c000 {
-		status = "okay";
+/* Bluetooth - WCN7850 via GENI UART */
+&qup_se15_uart {
+	status = "okay";
 
-		wcd9395: codec@1,0 {
-			compatible = "qcom,wcd9395-codec";
-			reg = <1 0>;
-		};
+	bluetooth {
+		compatible = "qcom,wcn7850-bt";
+		max-speed = <3200000>;
+		status = "okay";
 	};
 };
 
