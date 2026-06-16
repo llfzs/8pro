@@ -79,7 +79,7 @@ install_deps() {
         gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
         device-tree-compiler bc bison flex libssl-dev \
         python3 python3-pip wget curl cpio gzip \
-        qemu-user-static e2fsprogs parted xz-utils \
+        qemu-user-static e2fsprogs parted xz-utils parted cfdisk \
         2>/dev/null
     # 在需要时使用 sudo 安装 python 包（若有 sudo）
     if [ -n "${SUDO_CMD}" ]; then
