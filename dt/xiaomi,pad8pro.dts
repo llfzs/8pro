@@ -9,7 +9,6 @@
 /dts-v1/;
 
 #include "sm8750.dtsi"
-#include "sm8750-mtp.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
@@ -67,28 +66,6 @@
 	};
 };
 
-&qupv3_id_0 {
-	status = "okay";
-
-	/* Sound */
-	slim@98c000 {
-		status = "okay";
-
-		wcd9395: codec@1,0 {
-			compatible = "qcom,wcd9395-codec";
-			reg = <1 0>;
-		};
-	};
-};
-
-&qupv3_id_1 {
-	status = "okay";
-};
-
-&qupv3_id_2 {
-	status = "okay";
-};
-
 /* UART14 - Debug console */
 &uart14 {
 	status = "okay";
@@ -120,8 +97,6 @@
 		touchscreen-size-x = <3200>;
 		touchscreen-size-y = <2136>;
 		touchscreen-max-pressure = <255>;
-
-		focaltech,panel-coords = <0 0 3200 2136>;
 	};
 };
 
@@ -149,74 +124,9 @@
 /* UFS Storage */
 &ufs_mem_hc {
 	status = "okay";
-
-	vdd-supply = <&ldo5>;
-	vddq-supply = <&ldo7>;
-	vcc-supply = <&ldo5>;
-
-	qcom,vdd-voltage-level = <1800000 1800000>;
-	qcom,vddq-voltage-level = <1200000 1200000>;
-	qcom,vcc-voltage-level = <1800000 1800000>;
 };
 
 &ufs_mem_phy {
-	status = "okay";
-};
-
-/* USB */
-&usb0 {
-	status = "okay";
-};
-
-&usb0_dwc3 {
-	dr_mode = "otg";
-	usb-role-switch;
-	role-switch-default-mode = "peripheral";
-};
-
-/* Display - 11.2" 3200x2136 LCD */
-&mdss {
-	status = "okay";
-};
-
-&mdss_mdp {
-	status = "okay";
-};
-
-&dsi0 {
-	status = "okay";
-
-	vddio-supply = <&panel_vddio>;
-
-	panel@0 {
-		compatible = "xiaomi,pad8pro-panel", "panel-mdss-dsi";
-		reg = <0>;
-
-		reset-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&panel_reset_default>;
-
-		vddio-supply = <&panel_vddio>;
-
-		display-timings {
-			timing-0 {
-				clock-frequency = <600000000>;
-				hactive = <3200>;
-				vactive = <2136>;
-				hfront-porch = <40>;
-				hback-porch = <40>;
-				hsync-len = <4>;
-				vfront-porch = <8>;
-				vback-porch = <8>;
-				vsync-len = <4>;
-			};
-		};
-	};
-};
-
-/* GPU - Adreno 830 */
-&gpu {
 	status = "okay";
 };
 
@@ -235,18 +145,7 @@
 	status = "okay";
 };
 
-/* Bluetooth - WCN7850 via GENI UART */
-&qup_se15_uart {
-	status = "okay";
-
-	bluetooth {
-		compatible = "qcom,wcn7850-bt";
-		max-speed = <3200000>;
-		status = "okay";
-	};
-};
-
-&pinctrl {
+&tlmm {
 	panel_vddio_default: panel-vddio-default {
 		pins = "gpio45";
 		function = "gpio";
@@ -281,19 +180,4 @@
 		drive-strength = <8>;
 		bias-disable;
 	};
-};
-
-/* PMIC battery/charging */
-&pm8750_adc_tm {
-	status = "okay";
-};
-
-&pm8750_bms {
-	status = "okay";
-};
-
-&pm8750_charger {
-	status = "okay";
-	qcom,fast-charge-current-limit = <6700000>;
-	qcom,fast-charge-battery-voltage-limit = <4480>;
 };
