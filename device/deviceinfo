@@ -17,21 +17,20 @@ deviceinfo_dev_touchscreen_calibration=""
 # ── Kernel ────────────────────────────────────────
 deviceinfo_kernel_source="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
 deviceinfo_kernel_source_version="v6.12"
-deviceinfo_kernel_cmdline="console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 androidboot.hardware=qcom androidboot.console=ttyMSM0 androidboot.memcg=1 lpm_levels.sleep_disabled=1 video=DSI-1:3200x2136@60"
+deviceinfo_kernel_cmdline="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7 video=DSI-1:3200x2136@60"
 deviceinfo_kernel_defconfig="postmarketos-qcom-sm8750"
 deviceinfo_kernel_dtb_vendor="qcom"
 deviceinfo_kernel_dtb_name="xiaomi,pad8pro"
 deviceinfo_kernel_dtb_override=""
 
 # ── Partition layout ──────────────────────────────
-# Xiaomi Pad 8 Pro uses dynamic partitions (super partition)
+# Xiaomi Pad 8 Pro uses A/B layout with dynamic super partition
+# postmarketOS deploys rootfs to userdata, no need to flash system/vendor
 deviceinfo_flash_method="fastboot"
-deviceinfo_flash_fastboot_partition_system="system"
-deviceinfo_flash_fastboot_partition_vendor="vendor"
 deviceinfo_flash_fastboot_partition_boot="boot"
 deviceinfo_flash_fastboot_partition_dtbo="dtbo"
 deviceinfo_flash_fastboot_partition_userdata="userdata"
-deviceinfo_flash_fastboot_ab="true"
+deviceinfo_flash_fastboot_partition_vbmeta="vbmeta"
 
 # A/B slot support
 deviceinfo_has_ab_partition="true"
@@ -44,7 +43,7 @@ deviceinfo_bootimg_qcom_offset="0x00000000"
 deviceinfo_bootimg_custom_bootimg=""
 deviceinfo_bootimg_custom_bootimg_format=""
 
-# mkbootimg specific
+# mkbootimg parameters (aligned with stock boot.img layout)
 deviceinfo_bootimg_vendor_boot="true"
 deviceinfo_page_size="4096"
 deviceinfo_base_address="0x00000000"
@@ -54,6 +53,7 @@ deviceinfo_ramdisk_offset="0x01000000"
 deviceinfo_second_offset="0x00000000"
 
 # ── Modules ───────────────────────────────────────
+# Initramfs modules: ensure storage, display, USB work before rootfs mount
 deviceinfo_modules_initfs="msm_drm dwc3 qcom_spmi_pmic phy_qcom_qmp_pcie phy_qcom_qmp_ufs qcom_qusb2_phy ufs_qcom"
 
 # ── Display ───────────────────────────────────────
@@ -74,17 +74,34 @@ deviceinfo_arch="aarch64"
 # ── Nonfree firmware ─────────────────────────────
 deviceinfo_nonfree_firmware="qcom-sm8750"
 deviceinfo_nonfree_firmware_files="
-	ath12k/WCN7850/hw2.0/amss.bin
 	ath12k/WCN7850/hw2.0/board-2.bin
+	ath12k/WCN7850/hw2.0/amss.bin
 	ath12k/WCN7850/hw2.0/m3.bin
+	ath12k/WCN7850/hw2.0/regdb.bin
 	qcom/a680_zap.mbn
+	qca/crbtfw21.tlv
+	qca/crnv21.bin
 "
 
 # ── Additional device info ────────────────────────
 deviceinfo_comment="Bootloader must be unlocked via MiUnlockTool before flashing.
-Use: fastboot flash boot <boot.img>
-     fastboot flash dtbo <dtbo.img>
-WiFi: WCN7850 (ath12k driver)
-GPU: Adreno 830 (freedreno/a680)
-Touch: FocalTech FT8756 (I2C)
-Display: 11.2\" 3200x2136 LCD DSI panel"
+
+Mandatory pre-flash step (disable AVB to boot custom images):
+  fastboot flash vbmeta --disable-verity --disable-verification vbmeta.img
+
+Standard flash procedure:
+  fastboot flash boot boot.img
+  fastboot flash dtbo dtbo.img
+  fastboot flash userdata rootfs.img
+  fastboot set_active a
+  fastboot reboot
+
+Hardware details:
+- SoC: Snapdragon 8 Elite (SM8750-AB)
+- Display: 11.2\" 3200x2136 DSI LCD
+- GPU: Adreno 830 (freedreno / a680)
+- WiFi: WCN7850 (ath12k, PCIe)
+- Bluetooth: WCN7850 (btqca, GENI UART)
+- Touch: FocalTech FT8756 (I2C)
+- Storage: UFS
+- PMIC: PM8750 with battery charging"
