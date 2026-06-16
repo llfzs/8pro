@@ -70,7 +70,7 @@ jobs:
       - name: Create/Update release and upload artifacts
         uses: ncipollo/release-action@v1
         with:
-          tag: rootfs-latest
+          tag: Build ${{ github.run_id }}
           artifacts: build/output/boot.img.gz,build/output/rootfs.img.gz
           allowUpdates: true
           replacesArtifacts: true
