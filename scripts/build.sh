@@ -99,12 +99,21 @@ build_kernel() {
     local KSRC="$BUILD/linux"
 
     if [ ! -d "$KSRC" ]; then
-        git clone --depth=1 -b v6.12 \
-            https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git "$KSRC"
+        git clone --depth=1 -b v6.16 \
+            https://github.com/sm8750-mainline/linux.git "$KSRC"
     fi
 
-    # 拷贝设备树并加入编译 Makefile（使用 dtb-y 无条件构建，避免依赖配置变量）
-    cp "$DIR/dt/xiaomi,pad8pro.dts" "$KSRC/arch/arm64/boot/dts/qcom/"
+    # 拷贝设备树源（*.dts, *.dtsi）到内核 dts 目录，确保 include 可用
+    mkdir -p "$KSRC/arch/arm64/boot/dts/qcom/"
+    # 复制所有仓库内的 .dtsi（如果存在）到内核 DTS 目录
+    if compgen -G "$DIR/dt/*.dtsi" > /dev/null 2>&1; then
+        cp -a "$DIR/dt/"*.dtsi "$KSRC/arch/arm64/boot/dts/qcom/" 2>/dev/null || true
+    fi
+    # 复制所有仓库内的 .dts 到内核 DTS 目录
+    if compgen -G "$DIR/dt/*.dts" > /dev/null 2>&1; then
+        cp -a "$DIR/dt/"*.dts "$KSRC/arch/arm64/boot/dts/qcom/" 2>/dev/null || true
+    fi
+    # 确保设备 DTB 被包含为要构建的目标（使用 dtb-y 无条件构建）
     grep -q "xiaomi,pad8pro" "$KSRC/arch/arm64/boot/dts/qcom/Makefile" 2>/dev/null || \
         echo 'dtb-y += xiaomi,pad8pro.dtb' >> \
             "$KSRC/arch/arm64/boot/dts/qcom/Makefile"
