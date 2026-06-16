@@ -171,11 +171,19 @@ build_boot() {
     mkdir -p "$INIT"/{bin,dev,etc,lib,mnt/rootfs,proc,sys,run}
 
     # 下载 aarch64 架构静态 BusyBox（修正架构错误）
-    if [ ! -f "$BUILD/busybox-aarch64" ]; then
-        log "下载 aarch64 版 BusyBox..."
-        wget -q "https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" \
-            -O "$BUILD/busybox-aarch64" || err "BusyBox 下载失败，请检查网络"
+    # 缓存持久路径，放到仓库根目录缓存区
+    BUSYBOX_CACHE="$DIR/cache/busybox-aarch64"
+    mkdir -p "$DIR/cache"
+
+    if [ -f "$BUSYBOX_CACHE" ]; then
+        log "复用缓存内BusyBox，跳过下载"
+        cp "$BUSYBOX_CACHE" "$BUILD/"
+    else
+        log "首次下载BusyBox并缓存"
+        wget --timeout=20 --tries=3 -q "https://ghproxy.com/https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" -O "$BUSYBOX_CACHE" || err "下载失败"
+        cp "$BUSYBOX_CACHE" "$BUILD/"
     fi
+
     cp "$BUILD/busybox-aarch64" "$INIT/bin/busybox"
     chmod +x "$INIT/bin/busybox"
 
