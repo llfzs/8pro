@@ -1,0 +1,15 @@
+# 触摸屏权限，允许普通用户读写
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="FT8756", TAG+="systemd", ENV{ID_INPUT_TOUCHSCREEN}="1", MODE="0660", GROUP="input"
+
+# 显卡/帧缓冲权限
+SUBSYSTEM=="drm", KERNEL=="card*", MODE="0660", GROUP="video"
+SUBSYSTEM=="fb", KERNEL=="fb0", MODE="0660", GROUP="video"
+
+# 传感器I2C设备权限
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-12", MODE="0660", GROUP="input"
+
+# 串口调试权限
+SUBSYSTEM=="tty", KERNEL=="ttyMSM0", MODE="0660", GROUP="uucp"
+
+# USB gadget/RNDIS网络
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="gadget", MODE="0660"

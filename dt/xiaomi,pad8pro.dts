@@ -25,8 +25,8 @@
 	};
 
 	chosen {
-		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
-		stdout-path = &framebuffer0;
+		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
+		stdout-path = "/framebuffer@fc800000";
 	};
 
 	/* Panel regulator - 1.2V for DSI */
@@ -55,22 +55,10 @@
 		pinctrl-0 = <&panel_reset_default>;
 	};
 
-	reserved-memory {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-
-		/* 启动帧缓冲内存预留：与Bootloader连续显存地址对齐，适配3200x2136分辨率 */
-		fb_mem: framebuffer@9c000000 {
-			reg = <0x0 0x9c000000 0x0 0x02000000>;
-			no-map;
-		};
-	};
-
-	/* 早期简单帧缓冲：启动阶段屏幕输出内核日志，无需等待原生DSI面板驱动加载 */
-	framebuffer0: framebuffer@9c000000 {
+	/* 早期简单帧缓冲：复用bootloader splash显存，启动阶段输出内核日志 */
+	framebuffer0: framebuffer@fc800000 {
 		compatible = "simple-framebuffer";
-		reg = <0x0 0x9c000000 0x0 0x02000000>;
+		reg = <0x0 0xfc800000 0x0 0x02b00000>;
 		width = <3200>;
 		height = <2136>;
 		stride = <12800>;
@@ -171,6 +159,10 @@
 	qcom,vcc-voltage-level = <1800000 1800000>;
 };
 
+&ufs_mem_phy {
+	status = "okay";
+};
+
 /* USB */
 &usb0 {
 	status = "okay";
@@ -237,6 +229,10 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default>;
+};
+
+&pcie0_phy {
+	status = "okay";
 };
 
 /* Bluetooth - WCN7850 via GENI UART */

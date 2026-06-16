@@ -1,216 +1,56 @@
 # postmarketOS kernel config fragment for Xiaomi Pad 8 Pro (SM8750)
-# Based on mainline defconfig for Qualcomm SM8750 MTP/QRD
+# 仅补充上游 defconfig 未默认开启的设备专属配置
 
-# ── Platform ──────────────────────────────────────
-CONFIG_ARCH_QCOM=y
-CONFIG_ARCH_SM8750=y
-CONFIG_ARM64=y
-
-# ── Core SoC ──────────────────────────────────────
-CONFIG_QCOM_COMMAND_DB=y
-CONFIG_QCOM_GENI_SE=y
-CONFIG_QCOM_ICC_BWMON=y
-CONFIG_QCOM_LLCC=y
-CONFIG_QCOM_MDT_LOADER=y
-CONFIG_QCOM_PDC=y
-CONFIG_QCOM_RMTFS_MEM=y
-CONFIG_QCOM_RPMH=y
-CONFIG_QCOM_SMEM=y
-CONFIG_QCOM_SMP2P=y
-CONFIG_QCOM_SPMI=y
-CONFIG_QCOM_SPMI_RRADC=y
-CONFIG_QCOM_STATS=y
-CONFIG_QCOM_WDT=y
-
-# ── Interconnect ──────────────────────────────────
-CONFIG_INTERCONNECT_QCOM=y
-CONFIG_INTERCONNECT_QCOM_SM8750=y
-
-# ── Display / DRM / Framebuffer Console ───────────
-CONFIG_DRM=y
-CONFIG_DRM_MSM=y
-CONFIG_DRM_MSM_DSI=y
-CONFIG_DRM_MSM_GPU=y
-CONFIG_DRM_PANEL_MIPI_DBI=y
-CONFIG_DRM_DISPLAY_CONNECTOR=y
-CONFIG_DRM_BRIDGE=y
-CONFIG_DRM_PANEL_BRIDGE=y
-CONFIG_DRM_FBDEV_EMULATION=y
+# ── 启动显示：simplefb + 帧缓冲控制台（启动日志上屏核心） ──
 CONFIG_FB=y
+CONFIG_FB_SIMPLE=y
+CONFIG_FB_CMDLINE=y
 CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
 CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
-CONFIG_VGA_CONSOLE=n
-CONFIG_DUMMY_CONSOLE=y
 CONFIG_FONT_8x16=y
 
-# ── GPU (Adreno 830 / a680) ───────────────────────
-CONFIG_DRM_MSM_GPU_STATE=y
-# Freedreno is built as module in mesa
-CONFIG_DRM_SCHED=y
+# DRM 显示与 fbdev 模拟（原生面板驱动加载后接管）
+CONFIG_DRM_MSM=y
+CONFIG_DRM_MSM_DSI=y
+CONFIG_DRM_MSM_GPU=y
+CONFIG_DRM_FBDEV_EMULATION=y
 
-# ── Touchscreen ───────────────────────────────────
-CONFIG_TOUCHSCREEN_FTS=y
-CONFIG_INPUT_MISC=y
+# ── 存储：UFS 物理层补充 ──
+CONFIG_PHY_QCOM_QMP_UFS=y
 
-# ── I2C / SPI ─────────────────────────────────────
-CONFIG_I2C=y
-CONFIG_I2C_QCOM_GENI=y
-CONFIG_SPI=y
-CONFIG_SPI_QCOM_GENI=y
+# ── PCIe WiFi ──
+CONFIG_PHY_QCOM_QMP_PCIE=y
+CONFIG_ATH12K=m
+CONFIG_ATH12K_PCI=m
 
-# ── UART (debug console) ─────────────────────────
-CONFIG_SERIAL_MSM_GENI=y
-CONFIG_SERIAL_MSM_GENI_CONSOLE=y
+# ── 蓝牙 ──
+CONFIG_BT_QCA=m
+CONFIG_BT_HCIUART=m
+CONFIG_RFKILL=y
 
-# ── Storage (UFS) ─────────────────────────────────
-CONFIG_SCSI=y
-CONFIG_SCSI_UFS_QCOM=y
-CONFIG_SCSI_UFS_HWMON=y
-CONFIG_BLK_DEV=y
+# ── 触控 ──
+CONFIG_TOUCHSCREEN_FTS=m
 
-# ── USB ───────────────────────────────────────────
-CONFIG_USB=y
-CONFIG_USB_DWC3=y
-CONFIG_USB_DWC3_QCOM=y
-CONFIG_USB_GADGET=y
-CONFIG_USB_CONFIGFS=y
+# ── 传感器 ──
+CONFIG_ST_LSM6DSO=m
+CONFIG_LIS2MDL=m
+
+# ── USB 功能补充 ──
 CONFIG_USB_CONFIGFS_RNDIS=y
 CONFIG_USB_CONFIGFS_NCM=y
-CONFIG_USB_CONFIGFS_MASS_STORAGE=y
-CONFIG_USB_CONFIGFS_F_FS=y
 CONFIG_USB_ROLE_SWITCH=y
-CONFIG_TYPEC=y
-CONFIG_TYPEC_UCSI=y
-CONFIG_UCSI_PMIC_GLINK=y
 
-# ── PCIe (WiFi) ───────────────────────────────────
-CONFIG_PCIE=y
-CONFIG_PCIE_QCOM=y
-CONFIG_PHY_QCOM_QMP_PCIE=y
-
-# ── WiFi (ath12k / WCN7850) ───────────────────────
-CONFIG_ATH12K=y
-CONFIG_ATH12K_PCI=y
-CONFIG_WLAN=y
-CONFIG_WLAN_VENDOR_ATH=y
-CONFIG_MAC80211=y
-CONFIG_CFG80211=y
-CONFIG_NL80211_TESTMODE=y
-
-# ── Bluetooth ─────────────────────────────────────
-CONFIG_BT=y
-CONFIG_BT_QCA=y
-CONFIG_BT_HCIUART=y
-CONFIG_BT_HCIBTUSB=y
-
-# ── Audio ─────────────────────────────────────────
-CONFIG_SND=y
-CONFIG_SND_SOC=y
-CONFIG_SND_SOC_QCOM=y
-CONFIG_SND_SOC_SM8750=y
-CONFIG_SND_SOC_WCD939X=y
-CONFIG_SND_SOC_WSA884X=y
-CONFIG_SND_SOC_SWR=y
-CONFIG_SND_USB_AUDIO=y
-
-# ── Power Management ──────────────────────────────
-CONFIG_REGULATOR=y
+# ── 电源与充电 ──
 CONFIG_REGULATOR_QCOM_RPMH=y
-CONFIG_REGULATOR_QCOM_SPMI=y
-CONFIG_CHARGER_QCOM_SPMI=y
 CONFIG_BATTERY_QCOM_BMS=y
-CONFIG_POWER_RESET_QCOM=y
-
-# ── Thermal ───────────────────────────────────────
-CONFIG_THERMAL=y
 CONFIG_THERMAL_QCOM_SPMI_ADC_TM5=y
-CONFIG_THERMAL_QCOM_LMH=y
-CONFIG_THERMAL_GOV_POWER_ALLOCATOR=y
-CONFIG_THERMAL_GOV_STEP_WISE=y
-CONFIG_THERMAL_HWMON=y
 
-# ── Clock ─────────────────────────────────────────
-CONFIG_COMMON_CLK_QCOM=y
-CONFIG_QCOM_CLK_RPMH=y
-CONFIG_QCOM_CLK_SMD_RPM=y
-
-# ── GPIO / Pinctrl ───────────────────────────────
-CONFIG_PINCTRL=y
-CONFIG_PINCTRL_QCOM=y
-CONFIG_PINCTRL_SM8750=y
-CONFIG_GPIO_CDEV=y
-
-# ── Sensors ───────────────────────────────────────
-CONFIG_IIO=y
-CONFIG_ST_LSM6DSO=y
-CONFIG_LIS2MDL=y
-
-# ── Input ─────────────────────────────────────────
-CONFIG_INPUT=y
-CONFIG_INPUT_EVDEV=y
-CONFIG_INPUT_GPIO_KEYS=y
-CONFIG_INPUT_MATRIXKMAP=y
-CONFIG_INPUT_TOUCHSCREEN=y
-CONFIG_INPUT_MISC=y
-
-# ── Media / Camera (basic) ───────────────────────
-CONFIG_MEDIA_SUPPORT=y
-CONFIG_MEDIA_CAMERA_SUPPORT=y
-CONFIG_VIDEO_V4L2=y
-CONFIG_V4L2_FWNODE=y
-
-# ── DMA ───────────────────────────────────────────
-CONFIG_QCOM_GPI_DMA=y
-
-# ── Remoteproc ────────────────────────────────────
-CONFIG_QCOM_Q6V5_ADSP=y
-CONFIG_QCOM_Q6V5_MSS=y
-CONFIG_QCOM_Q6V5_PAS=y
-CONFIG_QCOM_SYSMON=y
-CONFIG_RPMSG=y
-CONFIG_RPMSG_CHAR=y
-CONFIG_RPMSG_QCOM_GLINK_RPM=y
-CONFIG_RPMSG_QCOM_GLINK_SMEM=y
-
-# ── Misc ──────────────────────────────────────────
-CONFIG_MFD_QCOM_RPMH=y
-CONFIG_MFD_SPMI_PMIC=y
-CONFIG_RTC_DRV_PM8XXX=y
-CONFIG_QCOM_AOSS_QMP=y
-CONFIG_QCOM_IPCC=y
-
-# ── Filesystems ───────────────────────────────────
-CONFIG_EXT4_FS=y
-CONFIG_F2FS_FS=y
-CONFIG_VFAT_FS=y
-CONFIG_NTFS3_FS=y
-CONFIG_TMPFS=y
-CONFIG_PROC_FS=y
-CONFIG_SYSFS=y
-CONFIG_DEVTMPFS=y
-CONFIG_DEVTMPFS_MOUNT=y
-
-# ── Networking ────────────────────────────────────
-CONFIG_NET=y
-CONFIG_INET=y
-CONFIG_IPV6=y
-CONFIG_NETDEVICES=y
-CONFIG_WIRELESS=y
-CONFIG_CFG80211_WEXT=y
-
-# ── Security ──────────────────────────────────────
-CONFIG_SECURITY=y
-CONFIG_SECURITY_APPARMOR=y
-
-# ── Misc options ──────────────────────────────────
-CONFIG_PRINTK=y
+# ── 调试与启动参数 ──
 CONFIG_EARLYCON=y
 CONFIG_CMDLINE="console=ttyMSM0,115200n8 console=tty0 earlycon=msm_geni_serial,0xa9c000"
 CONFIG_CMDLINE_EXTEND=y
-CONFIG_PM=y
-CONFIG_PM_SLEEP=y
-CONFIG_SUSPEND=y
-CONFIG_WAKELOCK=y
+CONFIG_PRINTK=y
+CONFIG_ARM64_APPENDED_DTB=y

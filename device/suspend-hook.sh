@@ -1,16 +1,20 @@
 #!/bin/sh
-# Suspend/resume hook for Xiaomi Pad 8 Pro
-# Disables/enables display around suspend to prevent glitches
+# /etc/pm/sleep.d/20-xiaomi-pad8pro-suspend
+# Xiaomi Pad 8 Pro 休眠/唤醒外设复位钩子
 
 case "$1" in
-	hibernate|suspend)
-		# Turn off backlight
-		echo 0 > /sys/class/backlight/*/brightness 2>/dev/null
-		;;
-	thaw|resume)
-		# Restore backlight
-		echo 2048 > /sys/class/backlight/*/brightness 2>/dev/null
-		# Reset touchscreen
-		echo 1 > /sys/class/i2c-dev/i2c-8/device/8-0038/reset 2>/dev/null
-		;;
+    pre)
+        # 进入休眠前：关闭触控、WiFi、节省功耗
+        echo "0" > /sys/class/backlight/backlight/bl_power
+        modprobe -r ath12k_pci || true
+        ;;
+    post)
+        # 唤醒后：恢复背光、重新加载无线驱动
+        echo "0" > /sys/class/backlight/backlight/bl_power
+        modprobe ath12k_pci || true
+        # 触发触摸屏重新初始化
+        echo 1 > /sys/bus/i2c/devices/0-0038/reset
+        sleep 0.1
+        echo 0 > /sys/bus/i2c/devices/0-0038/reset
+        ;;
 esac
