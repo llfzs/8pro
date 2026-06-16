@@ -9,7 +9,6 @@
 /dts-v1/;
 
 #include "sm8750.dtsi"
-#include "sm8750-pmics.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
