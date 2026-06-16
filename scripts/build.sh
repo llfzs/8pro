@@ -99,8 +99,8 @@ build_kernel() {
     local KSRC="$BUILD/linux"
 
     if [ ! -d "$KSRC" ]; then
-        git clone --depth=1 -b v6.12 \
-            https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git "$KSRC"
+        git clone --depth=1 -b v6.16 \
+            https://github.com/sm8750-mainline/linux.git "$KSRC"
     fi
 
     # 拷贝设备树并加入编译 Makefile（使用 dtb-y 无条件构建，避免依赖配置变量）
