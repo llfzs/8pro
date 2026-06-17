@@ -98,11 +98,14 @@ build_kernel() {
     log "下载并编译 Linux 内核..."
     local KSRC="$BUILD/linux"
 
+    #if [ ! -d "$KSRC" ]; then
+    #    git clone --depth=1 -b v6.16 \
+            #https://github.com/sm8750-mainline/linux.git "$KSRC"
+    #fi
     if [ ! -d "$KSRC" ]; then
-        git clone --depth=1 -b v6.16 \
-            https://github.com/sm8750-mainline/linux.git "$KSRC"
+        git clone --depth=1 -b for-next \
+            https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux.git "$KSRC"
     fi
-
     # 拷贝设备树源（*.dts, *.dtsi）到内核 dts 目录，确保 include 可用
     mkdir -p "$KSRC/arch/arm64/boot/dts/qcom/"
     # 复制所有仓库内的 .dtsi（如果存在）到内核 DTS 目录
