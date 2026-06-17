@@ -1,5 +1,6 @@
 # Xiaomi Pad 8 Pro - postmarketOS device info
 # Based on Qualcomm SM8750-AB (Snapdragon 8 Elite)
+# Modified according to actual hardware dmesg log
 
 # ── Identification ───────────────────────────────
 deviceinfo_name="Xiaomi Pad 8 Pro"
@@ -15,24 +16,27 @@ deviceinfo_dev_touchscreen=""
 deviceinfo_dev_touchscreen_calibration=""
 
 # ── Kernel ────────────────────────────────────────
-deviceinfo_kernel_source="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
-deviceinfo_kernel_source_version="v6.12"
-deviceinfo_kernel_cmdline="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7 video=DSI-1:3200x2136@60"
-deviceinfo_kernel_defconfig="postmarketos-qcom-sm8750"
+# 重要：必须使用厂商或高通下游内核，主线内核 v6.12 不支持 SM8750
+# 请替换为实际内核仓库地址，例如：https://github.com/llfzs/8pro-kernel 或厂商源码
+deviceinfo_kernel_source="https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux.git"
+deviceinfo_kernel_source_version="for-next"
+# defconfig 应使用厂商提供的配置，如 sm8750_defconfig，并通过 fragment 补充
+deviceinfo_kernel_defconfig="sm8750_defconfig"
+# dtb 名称需与内核编译生成的 dtb 文件名一致，通常为 sm8750-piano.dtb
+# 请确认实际文件名（可在内核源码 arch/arm64/boot/dts/qcom/ 目录下查看）
 deviceinfo_kernel_dtb_vendor="qcom"
-deviceinfo_kernel_dtb_name="xiaomi,pad8pro"
+deviceinfo_kernel_dtb_name="sm8750-piano"
 deviceinfo_kernel_dtb_override=""
 
+# 内核命令行：移除 video= 参数，保留控制台输出
+deviceinfo_kernel_cmdline="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7"
+
 # ── Partition layout ──────────────────────────────
-# Xiaomi Pad 8 Pro uses A/B layout with dynamic super partition
-# postmarketOS deploys rootfs to userdata, no need to flash system/vendor
 deviceinfo_flash_method="fastboot"
 deviceinfo_flash_fastboot_partition_boot="boot"
 deviceinfo_flash_fastboot_partition_dtbo="dtbo"
 deviceinfo_flash_fastboot_partition_userdata="userdata"
 deviceinfo_flash_fastboot_partition_vbmeta="vbmeta"
-
-# A/B slot support
 deviceinfo_has_ab_partition="true"
 deviceinfo_flash_ab_slot="a"
 
@@ -42,8 +46,6 @@ deviceinfo_bootimg_mtk_offset=""
 deviceinfo_bootimg_qcom_offset="0x00000000"
 deviceinfo_bootimg_custom_bootimg=""
 deviceinfo_bootimg_custom_bootimg_format=""
-
-# mkbootimg parameters (aligned with stock boot.img layout)
 deviceinfo_bootimg_vendor_boot="true"
 deviceinfo_page_size="4096"
 deviceinfo_base_address="0x00000000"
@@ -53,10 +55,11 @@ deviceinfo_ramdisk_offset="0x01000000"
 deviceinfo_second_offset="0x00000000"
 
 # ── Modules ───────────────────────────────────────
-# Initramfs modules: ensure storage, display, USB work before rootfs mount
+# 根据原厂日志，需要加载显示、存储、USB 等驱动；msm_drm 通常是模块，但可内置
+# 此处列出必须提前加载的模块（如果编译为模块）
 deviceinfo_modules_initfs="msm_drm dwc3 qcom_spmi_pmic phy_qcom_qmp_pcie phy_qcom_qmp_ufs qcom_qusb2_phy ufs_qcom"
 
-# ── Display ───────────────────────────────────────
+# ── Display ──────────────────────────────────────
 deviceinfo_display_driver="mesa"
 deviceinfo_display_margin="0"
 
@@ -74,13 +77,13 @@ deviceinfo_arch="aarch64"
 # ── Nonfree firmware ─────────────────────────────
 deviceinfo_nonfree_firmware="qcom-sm8750"
 deviceinfo_nonfree_firmware_files="
-	ath12k/WCN7850/hw2.0/board-2.bin
-	ath12k/WCN7850/hw2.0/amss.bin
-	ath12k/WCN7850/hw2.0/m3.bin
-	ath12k/WCN7850/hw2.0/regdb.bin
-	qcom/a680_zap.mbn
-	qca/crbtfw21.tlv
-	qca/crnv21.bin
+    ath12k/WCN7850/hw2.0/board-2.bin
+    ath12k/WCN7850/hw2.0/amss.bin
+    ath12k/WCN7850/hw2.0/m3.bin
+    ath12k/WCN7850/hw2.0/regdb.bin
+    qcom/a680_zap.mbn
+    qca/crbtfw21.tlv
+    qca/crnv21.bin
 "
 
 # ── Additional device info ────────────────────────
@@ -96,12 +99,19 @@ Standard flash procedure:
   fastboot set_active a
   fastboot reboot
 
-Hardware details:
+Hardware details (verified from dmesg):
 - SoC: Snapdragon 8 Elite (SM8750-AB)
-- Display: 11.2\" 3200x2136 DSI LCD
+- Display: 11.2\" 3200x2136 DSI LCD (panel: xiaomi p81 35 02 0b vid mode dualdsi dsc)
 - GPU: Adreno 830 (freedreno / a680)
 - WiFi: WCN7850 (ath12k, PCIe)
 - Bluetooth: WCN7850 (btqca, GENI UART)
-- Touch: FocalTech FT8756 (I2C)
-- Storage: UFS
-- PMIC: PM8750 with battery charging"
+- Touch: Novatek nt36532 (SPI, IRQ 674) - Note: device tree must use novatek compatible
+- Storage: UFS (KIOXIA)
+- PMIC: PM8750 with battery charging
+- Backlight: ktz8866 (I2C) - device tree must include backlight node
+- Audio: fs19xx smartpa (I2C 0x34-0x37)
+
+Important: The device tree must be significantly enhanced compared to the current skeleton.
+Missing nodes: DSI panel, backlight, correct touch compatible, and possibly others.
+Refer to the original Android kernel dts for proper configuration.
+"

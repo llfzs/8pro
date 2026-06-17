@@ -117,8 +117,8 @@ build_kernel() {
         cp -a "$DIR/dt/"*.dts "$KSRC/arch/arm64/boot/dts/qcom/" 2>/dev/null || true
     fi
     # 确保设备 DTB 被包含为要构建的目标（使用 dtb-y 无条件构建）
-    grep -q "xiaomi,pad8pro" "$KSRC/arch/arm64/boot/dts/qcom/Makefile" 2>/dev/null || \
-        echo 'dtb-y += xiaomi,pad8pro.dtb' >> \
+    grep -q "sm8750-piano" "$KSRC/arch/arm64/boot/dts/qcom/Makefile" 2>/dev/null || \
+        echo 'dtb-y += sm8750-piano.dtb' >> \
             "$KSRC/arch/arm64/boot/dts/qcom/Makefile"
 
     cd "$KSRC"
@@ -152,7 +152,7 @@ build_kernel() {
 
     # 拷贝产物
     cp "$BUILD/kout/arch/arm64/boot/Image" "$BUILD/Image"
-    cp "$BUILD/kout/arch/arm64/boot/dts/qcom/xiaomi,pad8pro.dtb" "$BUILD/" 2>/dev/null || \
+    cp "$BUILD/kout/arch/arm64/boot/dts/qcom/sm8750-piano.dtb" "$BUILD/" 2>/dev/null || \
         cp "$BUILD/kout/arch/arm64/boot/dts/qcom/"*.dtb "$BUILD/" 2>/dev/null || true
 
     cd "$DIR"
@@ -177,7 +177,7 @@ build_boot() {
     log "构建 boot.img..."
     local KIMG="$BUILD/Image"
     local INITRAMFS="$BUILD/initramfs.gz"
-    local DTB="$BUILD/xiaomi,pad8pro.dtb"
+    local DTB="$BUILD/sm8750-piano.dtb"
 
     [ ! -f "$KIMG" ] && err "内核 Image 不存在，请先执行 kernel 步骤"
 

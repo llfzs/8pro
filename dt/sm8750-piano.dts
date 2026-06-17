@@ -1,0 +1,328 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device tree for Xiaomi Pad 8 Pro (SM8750-AB)
+ *
+ * Based on Qualcomm SM8750 MTP/QRD reference board.
+ * Xiaomi Pad 8 Pro uses Snapdragon 8 Elite (SM8750-AB).
+ * 
+ * Modified for postmarketOS / mainline Linux compatibility.
+ */
+
+/dts-v1/;
+
+#include "sm8750.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/clock/qcom,sm8750-dispcc.h>   // 可能需包含，若编译报错可注释
+
+/ {
+	model = "Xiaomi Pad 8 Pro";
+	compatible = "sm8750-piano", "qcom,sm8750", "qcom,sm8750-mtp";
+
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart14;
+	};
+
+	chosen {
+		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
+		stdout-path = "/framebuffer@fc800000";
+	};
+
+	/* 板级固定时钟（若 sm8750.dtsi 已提供可删除） */
+	xo_board: xo-board {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <38400000>;
+		clock-output-names = "xo_board";
+	};
+
+	sleep_clk: sleep-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <32768>;
+		clock-output-names = "sleep_clk";
+	};
+
+	bi_tcxo_div2: bi-tcxo-div2 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <19200000>;
+		clock-output-names = "bi_tcxo_div2";
+	};
+
+	bi_tcxo_ao_div2: bi-tcxo-ao-div2 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <19200000>;
+		clock-output-names = "bi_tcxo_ao_div2";
+	};
+
+	/* 面板 VDDIO 稳压器（1.2V） */
+	panel_vddio: regulator-panel-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vddio";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		gpio = <&tlmm 45 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_vddio_default>;
+	};
+
+	/* 面板复位控制（GPIO 46） */
+	panel_reset: regulator-panel-reset {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_reset";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 46 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_reset_default>;
+	};
+
+	/* 背光控制（ktz8866，I2C 地址需确认） */
+	backlight: backlight {
+		compatible = "ktz8866";
+		reg = <0x11>;          /* 根据原厂 DTS 确认，常见 0x11 或 0x12 */
+		/* I2C 总线需指定，若使用 &i2c1 等 */
+		pinctrl-names = "default";
+		pinctrl-0 = <&backlight_default>;
+		default-brightness = <200>;
+		max-brightness = <4095>;
+		status = "okay";
+	};
+
+	/* 早期简单帧缓冲（使用 bootloader splash 显存） */
+	framebuffer0: framebuffer@fc800000 {
+		compatible = "simple-framebuffer";
+		reg = <0x0 0xfc800000 0x0 0x02b00000>;
+		width = <3200>;
+		height = <2136>;
+		stride = <12800>;
+		format = "a8r8g8b8";
+		status = "okay";
+	};
+};
+
+/* UART14 - 调试串口 */
+&uart14 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart14_default>;
+};
+
+/*
+ * 触摸屏：Novatek NT36532 (SPI)
+ * 根据日志，IRQ=674, reset=700, status=607
+ * 使用 SPI 总线（通常为 &spi1）
+ */
+&spi1 {
+	status = "okay";
+	cs-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;  /* 片选，需确认实际 GPIO */
+
+	touchscreen@0 {
+		compatible = "novatek,NVT-ts";
+		reg = <0>;
+		spi-max-frequency = <19200000>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <674 IRQ_TYPE_EDGE_FALLING>;
+
+		reset-gpios = <&tlmm 700 GPIO_ACTIVE_LOW>;
+		status-gpios = <&tlmm 607 GPIO_ACTIVE_HIGH>;
+
+		vdd-supply = <&panel_vddio>;
+		avdd-supply = <&panel_vddio>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_spi_default>;
+
+		touchscreen-size-x = <3200>;
+		touchscreen-size-y = <2136>;
+		touchscreen-max-pressure = <255>;
+
+		/* 可选属性：固件名、面板 ID 等 */
+		novatek,reset-delay-ms = <10>;
+	};
+};
+
+/* I2C 用于传感器（原 accelerometer/magnetometer，保留） */
+&i2c12 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	imu@68 {
+		compatible = "st,lsm6dso";
+		reg = <0x68>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <80 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	magn@0c {
+		compatible = "st,lis2mdl";
+		reg = <0x0c>;
+	};
+};
+
+/* I2C 用于背光（ktz8866 通常挂在 I2C 上，假设为 &i2c1） */
+&i2c1 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	backlight@11 {
+		compatible = "ktz8866";
+		reg = <0x11>;
+		default-brightness = <200>;
+		max-brightness = <4095>;
+		status = "okay";
+	};
+};
+
+/* UFS 存储 */
+&ufs_mem_hc {
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	status = "okay";
+};
+
+/* WiFi / BT (WCN7850 via PCIe) */
+&pcie0 {
+	status = "okay";
+
+	perst-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
+	enable-gpios = <&tlmm 99 GPIO_ACTIVE_HIGH>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_default>;
+
+	/* 添加 PHY 引用（之前缺失） */
+	phys = <&pcie0_phy>;
+	phy-names = "pciephy";
+};
+
+&pcie0_phy {
+	status = "okay";
+};
+
+/* ---------- 显示 DSI 面板 ---------- */
+/* 注意：以下节点需要从原厂设备树中完整移植时序参数，此处仅提供框架 */
+
+&dsi0 {
+	status = "okay";
+	/* 若需配置时钟，可添加 assigned-clocks 等 */
+
+	panel@0 {
+		compatible = "xiaomi,p81-panel";   /* 实际兼容字符串需查原厂 DTS，可能为 "xiaomi,p81-35-02-0b-panel" 等 */
+		reg = <0>;
+
+		backlight = <&backlight>;
+		reset-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
+		vddio-supply = <&panel_vddio>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_reset_default>;
+
+		/* 面板时序：必须从原厂 DTS 复制以下全部参数 */
+		panel-timing {
+			/* 示例值，必须替换为实际值 */
+			clock-frequency = <0>;
+			hactive = <3200>;
+			vactive = <2136>;
+			hfront-porch = <0>;
+			hsync-len = <0>;
+			hback-porch = <0>;
+			vfront-porch = <0>;
+			vsync-len = <0>;
+			vback-porch = <0>;
+			/* 可能还需要 hsync-active, vsync-active, de-active 等 */
+		};
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
+
+	ports {
+		port@1 {
+			reg = <1>;
+			dsi0_out: endpoint {
+				remote-endpoint = <&panel_in>;
+				/* 若为双 DSI，可能需 data-lanes = <0 1 2 3>; */
+			};
+		};
+	};
+};
+
+&dsi0_phy {
+	status = "okay";
+};
+
+/* 若存在第二个 DSI 接口（双 DSI），也需使能 */
+&dsi1 {
+	status = "okay";
+	/* 通常 panel 节点只放在 dsi0，dsi1 作为从设备 */
+};
+
+&dsi1_phy {
+	status = "okay";
+};
+
+/* ---------- Pinmux 配置 ---------- */
+&tlmm {
+	/* 面板 VDDIO 使能 */
+	panel_vddio_default: panel-vddio-default {
+		pins = "gpio45";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* 面板复位 */
+	panel_reset_default: panel-reset-default {
+		pins = "gpio46";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* 触摸 SPI 引脚（GPIO 用于 SPI 通信，通常由 SPI 控制器管理，此处只配 IRQ/reset/status） */
+	ts_spi_default: ts-spi-default {
+		pins = "gpio674", "gpio700", "gpio607";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+
+	/* 调试串口 */
+	uart14_default: uart14-default {
+		pins = "gpio42", "gpio43";
+		function = "qup_se5_uart";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* PCIe 使能/复位 */
+	pcie0_default: pcie0-default {
+		pins = "gpio99", "gpio100";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* 背光 I2C（如果需要额外引脚配置） */
+	backlight_default: backlight-default {
+		pins = "gpioXX";   /* 若背光有专用 GPIO，在此添加 */
+		function = "gpio";
+		bias-disable;
+	};
+};
