@@ -32,14 +32,15 @@ CMDLINE="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000
 extract_firmware() {
     local FW="$BUILD/firmware"
     local SRC="$DIR/firmware"
-    mkdir -p "$FW"/{wifi,gpu,bt}
+    mkdir -p "$FW"/{wifi,gpu,bt,tz}
 
     # 优先使用项目内预置固件
     if [ -d "$SRC" ] && ls "$SRC"/wifi/ath12k &>/dev/null 2>&1; then
         log "使用项目内置固件 ($SRC)"
         [ -d "$SRC/wifi/ath12k" ] && cp -a "$SRC/wifi/ath12k" "$FW/wifi/" 2>/dev/null || true
-        [ -d "$SRC/gpu/qcom" ]   && cp -a "$SRC/gpu/qcom"   "$FW/gpu/"  2>/dev/null || true
+        [ -d "$SRC/gpu" ]        && cp -a "$SRC/gpu"        "$FW/gpu/"  2>/dev/null || true
         [ -d "$SRC/bt/qca" ]     && cp -a "$SRC/bt/qca"     "$FW/bt/"   2>/dev/null || true
+        [ -d "$SRC/tz" ]         && cp -a "$SRC/tz"         "$FW/tz/"   2>/dev/null || true
         return
     fi
 
@@ -66,7 +67,8 @@ extract_firmware() {
         warn "未检测到 ADB 设备，请将固件按以下结构放入 firmware/ 目录："
         warn "  firmware/wifi/ath12k/WCN7850/...  ← WiFi 固件"
         warn "  firmware/bt/qca/...                ← 蓝牙固件"
-        warn "  firmware/gpu/qcom/a680_*.mbn      ← GPU 固件"
+        warn "  firmware/gpu/                      ← GPU 固件"
+        warn "  firmware/tz/                       ← TrustZone 固件"
     fi
 }
 
@@ -215,8 +217,9 @@ build_boot() {
     if [ -d "$BUILD/firmware" ]; then
         mkdir -p "$INIT/lib/firmware"
         [ -d "$BUILD/firmware/wifi/ath12k" ] && cp -a "$BUILD/firmware/wifi/ath12k" "$INIT/lib/firmware/" 2>/dev/null || true
-        [ -d "$BUILD/firmware/gpu/qcom" ]   && cp -a "$BUILD/firmware/gpu/qcom"   "$INIT/lib/firmware/" 2>/dev/null || true
+        [ -d "$BUILD/firmware/gpu" ]        && cp -a "$BUILD/firmware/gpu"        "$INIT/lib/firmware/" 2>/dev/null || true
         [ -d "$BUILD/firmware/bt/qca" ]     && cp -a "$BUILD/firmware/bt/qca"     "$INIT/lib/firmware/" 2>/dev/null || true
+        [ -d "$BUILD/firmware/tz" ]         && cp -a "$BUILD/firmware/tz"         "$INIT/lib/firmware/" 2>/dev/null || true
     fi
 
     # init 启动脚本（修正根分区路径为高通标准 by-name）
@@ -337,8 +340,9 @@ build_rootfs() {
         log "拷入固件..."
         mkdir -p "$RFS/lib/firmware"
         [ -d "$BUILD/firmware/wifi/ath12k" ] && cp -a "$BUILD/firmware/wifi/ath12k" "$RFS/lib/firmware/" 2>/dev/null || true
-        [ -d "$BUILD/firmware/gpu/qcom" ]   && cp -a "$BUILD/firmware/gpu/qcom"   "$RFS/lib/firmware/" 2>/dev/null || true
+        [ -d "$BUILD/firmware/gpu" ]        && cp -a "$BUILD/firmware/gpu"        "$RFS/lib/firmware/" 2>/dev/null || true
         [ -d "$BUILD/firmware/bt/qca" ]     && cp -a "$BUILD/firmware/bt/qca"     "$RFS/lib/firmware/" 2>/dev/null || true
+        [ -d "$BUILD/firmware/tz" ]         && cp -a "$BUILD/firmware/tz"         "$RFS/lib/firmware/" 2>/dev/null || true
     fi
 
     # ===================== 新增：整合udev规则 =====================
