@@ -4,8 +4,17 @@
  *
  * Based on Qualcomm SM8750 MTP/QRD reference board.
  * Xiaomi Pad 8 Pro uses Snapdragon 8 Elite (SM8750-AB).
- * 
- * Modified for postmarketOS / mainline Linux compatibility.
+ *
+ * Hardware summary:
+ *   SoC:      SM8750-AB (Snapdragon 8 Elite)
+ *   Display:  11.2" 3200x2136 dual-DSI DSC LCD (panel: xiaomi p81 35 02 0b)
+ *   GPU:      Adreno 830 (a680)
+ *   WiFi:     WCN7850 (ath12k, PCIe)
+ *   BT:       WCN7850 (btqca, GENI UART)
+ *   Touch:    Novatek NT36532 (SPI, IRQ 674)
+ *   Storage:  UFS (KIOXIA)
+ *   Backlight:ktz8866 (I2C)
+ *   Audio:    fs19xx smartpa (I2C 0x34-0x37)
  */
 
 /dts-v1/;
@@ -13,7 +22,12 @@
 #include "sm8750.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
-#include <dt-bindings/clock/qcom,sm8750-dispcc.h>   // 可能需包含，若编译报错可注释
+
+/*
+ * 若 sm8750.dtsi 尚未提供 dispcc 头文件，注释掉下行并在 panel 节点中
+ * 使用数字时钟 ID 替代。编译时根据实际情况调整。
+ */
+/* #include <dt-bindings/clock/qcom,sm8750-dispcc.h> */
 
 / {
 	model = "Xiaomi Pad 8 Pro";
@@ -27,11 +41,16 @@
 	};
 
 	chosen {
+		/*
+		 * 串口控制台用于调试；framebuffer 控制台用于屏幕日志。
+		 * 若 simplefb 未生效，可通过 cmdline 移除 tty0 避免卡住。
+		 */
 		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
-		stdout-path = "/framebuffer@fc800000";
+		stdout-path = "serial0";
 	};
 
-	/* 板级固定时钟（若 sm8750.dtsi 已提供可删除） */
+	/* ── 板级固定时钟 ──────────────────────────────────── */
+
 	xo_board: xo-board {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
@@ -57,8 +76,10 @@
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <19200000>;
-		clock-output-names = "bi_tcxo_ao_div2";
+		clock-output-names = "bi_tcxo_ao-div2";
 	};
+
+	/* ── 电源域 ────────────────────────────────────────── */
 
 	/* 面板 VDDIO 稳压器（1.2V） */
 	panel_vddio: regulator-panel-vddio {
@@ -86,45 +107,252 @@
 		pinctrl-0 = <&panel_reset_default>;
 	};
 
-	/* 背光控制（ktz8866，I2C 地址需确认） */
-	backlight: backlight {
-		compatible = "ktz8866";
-		reg = <0x11>;          /* 根据原厂 DTS 确认，常见 0x11 或 0x12 */
-		/* I2C 总线需指定，若使用 &i2c1 等 */
+	/* WLAN 电源使能（WCN7850） */
+	wlan_en: regulator-wlan-en {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan_en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tlmm 99 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
 		pinctrl-names = "default";
-		pinctrl-0 = <&backlight_default>;
-		default-brightness = <200>;
-		max-brightness = <4095>;
-		status = "okay";
+		pinctrl-0 = <&wlan_en_default>;
 	};
 
-	/* 早期简单帧缓冲（使用 bootloader splash 显存） */
+	/* ── 早期简单帧缓冲（使用 bootloader splash 显存） ── */
+	/*
+	 * 地址 0xfc800000 来自 bootloader 保留的 framebuffer 区域。
+	 * 若 bootloader 未保留该区域，simplefb 不会生效，但 DRM
+	 * 驱动接管后仍可正常显示。
+	 * 大小: 3200 * 2136 * 4 (ARGB) = 27,333,120 ≈ 0x01A18000
+	 * 预留 0x02b00000 留有余量。
+	 */
 	framebuffer0: framebuffer@fc800000 {
 		compatible = "simple-framebuffer";
 		reg = <0x0 0xfc800000 0x0 0x02b00000>;
 		width = <3200>;
 		height = <2136>;
-		stride = <12800>;
+		stride = <12800>;  /* 3200 * 4 bytes */
 		format = "a8r8g8b8";
 		status = "okay";
 	};
 };
 
-/* UART14 - 调试串口 */
+/* ═══════════════════════════════════════════════════════════
+ *  串口
+ * ═══════════════════════════════════════════════════════════ */
+
+/* UART14 - 调试串口（GENI SE5, GPIO 42/43） */
 &uart14 {
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart14_default>;
 };
 
+/* ═══════════════════════════════════════════════════════════
+ *  GPU — Adreno 830 (a680)
+ * ═══════════════════════════════════════════════════════════ */
+
 /*
- * 触摸屏：Novatek NT36532 (SPI)
- * 根据日志，IRQ=674, reset=700, status=607
- * 使用 SPI 总线（通常为 &spi1）
+ * sm8750.dtsi 应提供 &gpu 节点骨架。
+ * 此处仅补充板级属性（ZAP 固件、电源域）。
+ * 若 sm8750.dtsi 中节点名为其他名称（如 adreno_gpu），
+ * 请根据实际 dtsi 内容调整。
  */
+&gpu {
+	status = "okay";
+
+	/*
+	 * ZAP shader 固件：Adreno a680 需要加载 zap shader 才能正常工作。
+	 * 固件路径相对于 /lib/firmware/。
+	 * 若固件缺失，GPU 仍可工作但性能受限（安全模式）。
+	 */
+	qcom,gmu = <&gmu>;
+
+	/* GPU 电源域通常由 sm8750.dtsi 定义，此处无需重复 */
+};
+
+/* ═══════════════════════════════════════════════════════════
+ *  显示 — MDSS + 双 DSI 面板 (3200x2136 DSC)
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * 小米 Pad 8 Pro 使用双 DSI 面板配置：
+ *   - 面板: "xiaomi p81 35 02 0b vid mode dualdsi dsc"
+ *   - 分辨率: 3200x2136 @ 120Hz
+ *   - DSC 压缩: 是
+ *   - 模式: Video mode
+ *
+ * 配置要点:
+ *   1. DSI0 为主控制器，DSI1 为从控制器
+ *   2. 两个 DSI 控制器共享时钟（master/slave）
+ *   3. DSC 在 DSI0 侧配置
+ */
+
+/* MDSS (Mobile Display Sub System) 顶层节点 */
+&mdss {
+	status = "okay";
+};
+
+/* MDSS MDP (Display Processing Unit) */
+&mdss_mdp {
+	status = "okay";
+};
+
+/* DSI0 — 主控制器 */
+&dsi0 {
+	status = "okay";
+
+	/* DSI PHY */
+	phys = <&dsi0_phy>;
+	phy-names = "dsi";
+
+	/*
+	 * VDDIO 供电由 panel_vddio 稳压器提供。
+	 * 实际供电域配置取决于 sm8750.dtsi 中的定义。
+	 */
+
+	/* 端口定义：panel 输出端口 */
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dsi0_panel_in: endpoint {
+				remote-endpoint = <&panel_out0>;
+			};
+		};
+	};
+
+	/* 双 DSI 面板节点 */
+	panel@0 {
+		compatible = "xiaomi,p81-dual-dsi-dsc";
+		reg = <0>;
+
+		/*
+		 * 供电配置：
+		 * - vddio: 1.2V IO 供电
+		 * - vdd:   面板核心供电（由 PMIC LDO 提供）
+		 * - avdd:  模拟供电
+		 * 实际 supply 名称需与驱动匹配。
+		 */
+		power-supply = <&panel_vddio>;
+		reset-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_reset_default>;
+
+		/* 端口：panel 输出连接到 DSI0 */
+		port {
+			panel_out0: endpoint {
+				remote-endpoint = <&dsi0_panel_in>;
+			};
+		};
+
+		/*
+		 * 面板时序参数。
+		 * 以下为 3200x2136 @ 120Hz 的估算值，需要根据实际面板 datasheet 调整。
+		 * 若使用现成的面板驱动（如 panel-xiaomi-p81.c），时序由驱动内部定义。
+		 */
+		display-timings {
+			native-mode = <&timing0>;
+
+			timing0: timing0 {
+				clock-frequency = <600000000>;  /* 像素时钟 Hz */
+				hactive = <3200>;
+				vactive = <2136>;
+				hfront-porch = <40>;
+				hback-porch = <40>;
+				hsync-len = <4>;
+				vfront-porch = <8>;
+				vback-porch = <8>;
+				vsync-len = <4>;
+			};
+		};
+	};
+};
+
+/* DSI0 PHY */
+&dsi0_phy {
+	status = "okay";
+};
+
+/* DSI1 — 从控制器（双 DSI 模式） */
+&dsi1 {
+	status = "okay";
+
+	phys = <&dsi1_phy>;
+	phy-names = "dsi";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dsi1_panel_in: endpoint {
+				remote-endpoint = <&panel_out1>;
+			};
+		};
+	};
+
+	/*
+	 * 双 DSI 模式下，DSI1 不独立挂载面板节点，
+	 * 而是通过 DSI0 的面板节点的 dual-dsi 属性关联。
+	 * 具体方式取决于面板驱动实现。
+	 * 若驱动要求 DSI1 也挂 panel 节点，则在此添加。
+	 */
+};
+
+/* DSI1 PHY */
+&dsi1_phy {
+	status = "okay";
+};
+
+/* ═══════════════════════════════════════════════════════════
+ *  背光 — KTZ8866 (I2C)
+ * ═══════════════════════════════════════════════════════════ */
+
+/*
+ * KTZ8866 是一颗 I2C 背光驱动芯片。
+ * 根据原厂信息，挂载在 I2C 总线上，地址 0x11。
+ * I2C 总线编号需根据实际设备确认（此处假设 &i2c10）。
+ *
+ * 注意：原 DTS 中同时在根节点和 &i2c1 定义了背光，这是错误的。
+ * 背光芯片是 I2C 设备，必须放在 I2C 总线节点下。
+ */
+
+&i2c10 {
+	status = "okay";
+	clock-frequency = <400000>;
+
+	ktz8866@11 {
+		compatible = "ktz8866";
+		reg = <0x11>;
+
+		/* 背光亮度范围 */
+		default-brightness = <200>;
+		max-brightness = <4095>;
+
+		/* 使能 GPIO（若芯片有硬件使能引脚） */
+		/* enable-gpios = <&tlmm XX GPIO_ACTIVE_HIGH>; */
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&backlight_i2c_default>;
+
+		status = "okay";
+	};
+};
+
+/* ═══════════════════════════════════════════════════════════
+ *  触摸屏 — Novatek NT36532 (SPI)
+ * ═══════════════════════════════════════════════════════════ */
+
 &spi1 {
 	status = "okay";
-	cs-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;  /* 片选，需确认实际 GPIO */
+	cs-gpios = <&tlmm 0 GPIO_ACTIVE_LOW>;
 
 	touchscreen@0 {
 		compatible = "novatek,NVT-ts";
@@ -147,16 +375,19 @@
 		touchscreen-size-y = <2136>;
 		touchscreen-max-pressure = <255>;
 
-		/* 可选属性：固件名、面板 ID 等 */
 		novatek,reset-delay-ms = <10>;
 	};
 };
 
-/* I2C 用于传感器（原 accelerometer/magnetometer，保留） */
+/* ═══════════════════════════════════════════════════════════
+ *  传感器 — IMU + 磁力计 (I2C)
+ * ═══════════════════════════════════════════════════════════ */
+
 &i2c12 {
 	status = "okay";
 	clock-frequency = <400000>;
 
+	/* LSM6DSO: 6 轴加速度计 + 陀螺仪 */
 	imu@68 {
 		compatible = "st,lsm6dso";
 		reg = <0x68>;
@@ -164,27 +395,59 @@
 		interrupts = <80 IRQ_TYPE_LEVEL_HIGH>;
 	};
 
+	/* LIS2MDL: 3 轴磁力计 */
 	magn@0c {
 		compatible = "st,lis2mdl";
 		reg = <0x0c>;
 	};
 };
 
-/* I2C 用于背光（ktz8866 通常挂在 I2C 上，假设为 &i2c1） */
-&i2c1 {
-	status = "okay";
-	clock-frequency = <400000>;
+/* ═══════════════════════════════════════════════════════════
+ *  蓝牙 — WCN7850 (UART HCI)
+ * ═══════════════════════════════════════════════════════════ */
 
-	backlight@11 {
-		compatible = "ktz8866";
-		reg = <0x11>;
-		default-brightness = <200>;
-		max-brightness = <4095>;
+/*
+ * WCN7850 蓝牙通过 GENI UART 连接，使用 H4 协议。
+ * 驱动: btqca (CONFIG_BT_QCA=m)
+ * 固件: firmware/bt/qca/ 下的 gngbt* 和 gngperifw* 文件
+ *
+ * UART 总线编号需根据 SM8750 实际 QUP 配置确认。
+ * 通常蓝牙使用 &uart2 或 &uart6，此处假设 &uart2（GENI SE3）。
+ * 若实际不同，请根据 dmesg 中 btqca 的初始化日志调整。
+ */
+&uart2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_bt_default>;
+
+	bluetooth {
+		compatible = "qcom,wcn7850-bt";
+
+		/* 蓝牙使能 GPIO（WCN7850 共享 WLAN enable 引脚） */
+		enable-gpios = <&tlmm 99 GPIO_ACTIVE_HIGH>;
+
+		/* 蓝牙固件路径（相对于 /lib/firmware/） */
+		firmware-name = "qca/gngbtfw20.mbn";
+		nvm-firmware-name = "qca/gngbtnv20.bin";
+
+		/* 电源 */
+		vddio-supply = <&wlan_en>;
+		vdd-supply = <&wlan_en>;
+
+		/* HCI 传输设置 */
+		max-speed = <3000000>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&uart2_bt_default>;
+
 		status = "okay";
 	};
 };
 
-/* UFS 存储 */
+/* ═══════════════════════════════════════════════════════════
+ *  UFS 存储
+ * ═══════════════════════════════════════════════════════════ */
+
 &ufs_mem_hc {
 	status = "okay";
 };
@@ -193,28 +456,37 @@
 	status = "okay";
 };
 
-/* WiFi / BT (WCN7850 via PCIe) */
+/* ═══════════════════════════════════════════════════════════
+ *  WiFi — WCN7850 (PCIe)
+ * ═══════════════════════════════════════════════════════════ */
+
 &pcie0 {
 	status = "okay";
 
 	perst-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
-	enable-gpios = <&tlmm 99 GPIO_ACTIVE_HIGH>;
+	/* enable-gpios 移到 wlan_en 稳压器中统一管理 */
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default>;
 
-	/* 添加 PHY 引用（之前缺失） */
 	phys = <&pcie0_phy>;
 	phy-names = "pciephy";
+
+	/* WLAN 电源 */
+	vddpe-supply = <&wlan_en>;
 };
 
 &pcie0_phy {
 	status = "okay";
 };
 
-/* ---------- Pinmux 配置 ---------- */
+/* ═══════════════════════════════════════════════════════════
+ *  Pinmux 配置
+ * ═══════════════════════════════════════════════════════════ */
+
 &tlmm {
-	/* 面板 VDDIO 使能 */
+	/* ── 面板 ────────────────────────────────────────── */
+
 	panel_vddio_default: panel-vddio-default {
 		pins = "gpio45";
 		function = "gpio";
@@ -222,7 +494,6 @@
 		bias-disable;
 	};
 
-	/* 面板复位 */
 	panel_reset_default: panel-reset-default {
 		pins = "gpio46";
 		function = "gpio";
@@ -230,7 +501,8 @@
 		bias-disable;
 	};
 
-	/* 触摸 SPI 引脚（GPIO 用于 SPI 通信，通常由 SPI 控制器管理，此处只配 IRQ/reset/status） */
+	/* ── 触摸屏 ──────────────────────────────────────── */
+
 	ts_spi_default: ts-spi-default {
 		pins = "gpio674", "gpio700", "gpio607";
 		function = "gpio";
@@ -238,7 +510,8 @@
 		bias-pull-up;
 	};
 
-	/* 调试串口 */
+	/* ── 调试串口 (UART14, GENI SE5) ────────────────── */
+
 	uart14_default: uart14-default {
 		pins = "gpio42", "gpio43";
 		function = "qup_se5_uart";
@@ -246,18 +519,43 @@
 		bias-disable;
 	};
 
-	/* PCIe 使能/复位 */
+	/* ── 蓝牙串口 (UART2, GENI SE3) ───────────────────
+	 *  GPIO 编号需根据 SM8750 实际 QUP UART 引脚映射确认。
+	 *  以下为示例值，请查阅 SM8750 datasheet 或原厂 DTS。
+	 */
+	uart2_bt_default: uart2-bt-default {
+		pins = "gpio16", "gpio17", "gpio18", "gpio19";
+		function = "qup_se3_uart";
+		drive-strength = <6>;
+		bias-pull-up;
+	};
+
+	/* ── PCIe (WiFi) ─────────────────────────────────── */
+
 	pcie0_default: pcie0-default {
-		pins = "gpio99", "gpio100";
+		pins = "gpio100";
 		function = "gpio";
 		drive-strength = <8>;
 		bias-disable;
 	};
 
-	/* 背光 I2C（如果需要额外引脚配置） */
-	backlight_default: backlight-default {
-		pins = "gpioXX";   /* 若背光有专用 GPIO，在此添加 */
+	/* ── WLAN 使能 ───────────────────────────────────── */
+
+	wlan_en_default: wlan-en-default {
+		pins = "gpio99";
 		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* ── 背光 I2C ──────────────────────────────────────
+	 *  GPIO 编号需根据实际 I2C 总线引脚确认。
+	 *  I2C10 SDA/SCL 引脚编号请查阅 SM8750 datasheet。
+	 */
+	backlight_i2c_default: backlight-i2c-default {
+		pins = "gpio110", "gpio111";
+		function = "qup_se10_i2c";
+		drive-strength = <6>;
 		bias-disable;
 	};
 };

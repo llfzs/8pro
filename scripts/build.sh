@@ -240,7 +240,8 @@ build_boot() {
     fi
 
     # 从 deviceinfo 提取需要在 initramfs 中加载的模块
-    local INIT_MODULES="phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy"
+    # 包含：存储、显示、PCIe(WiFi)、USB、蓝牙HCI
+    local INIT_MODULES="phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy btqca hci_uart"
 
     # init 启动脚本
     cat > "$INIT/init" <<INITEOF
