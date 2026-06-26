@@ -2,8 +2,10 @@
 /*
  * Device tree for Xiaomi Pad 8 Pro (SM8750-AB)
  *
- * Based on dmesg from actual device + Qualcomm SM8750 conventions.
- * Hardware verified from kernel log 2026-06-26.
+ * Based on dmesg from actual device (2026-06-26).
+ * Only board-level nodes that don't depend on sm8750.dtsi labels.
+ * SoC-level nodes (gpu, mdss, dsi, uart, i2c, pcie, ufs) must be
+ * enabled AFTER sm8750.dtsi provides the corresponding labels.
  *
  * Hardware summary (verified from dmesg):
  *   SoC:       SM8750-AB (Snapdragon 8 Elite)
@@ -58,7 +60,6 @@
 
 	/* ── 电源域 ────────────────────────────────────────── */
 
-	/* 面板 VDDIO 稳压器（1.2V） */
 	panel_vddio: regulator-panel-vddio {
 		compatible = "regulator-fixed";
 		regulator-name = "panel_vddio";
@@ -71,7 +72,6 @@
 		pinctrl-0 = <&panel_vddio_default>;
 	};
 
-	/* 面板复位控制（GPIO 46） */
 	panel_reset: regulator-panel-reset {
 		compatible = "regulator-fixed";
 		regulator-name = "panel_reset";
@@ -84,7 +84,6 @@
 		pinctrl-0 = <&panel_reset_default>;
 	};
 
-	/* WLAN 电源使能（WCN7850） */
 	wlan_en: regulator-wlan-en {
 		compatible = "regulator-fixed";
 		regulator-name = "wlan_en";
@@ -111,10 +110,9 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  串口
+ *  调试串口 — ttyMSM0 @ 0xa9c000 (UART14, GPIO 42/43)
  * ═══════════════════════════════════════════════════════════ */
 
-/* UART14 — 调试串口（GENI SE, GPIO 42/43, ttyMSM0 @ 0xa9c000, IRQ 218） */
 &uart14 {
 	status = "okay";
 	pinctrl-names = "default";
@@ -122,124 +120,12 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  GPU — Adreno 830 (a680)
- * ═══════════════════════════════════════════════════════════ */
-
-&gpu {
-	status = "okay";
-	qcom,gmu = <&gmu>;
-};
-
-/* ═══════════════════════════════════════════════════════════
- *  显示 — MDSS + 双 DSI 面板 (BOE 3200x2136 DSC)
+ *  背光 — KTZ8866 x2
  *
- *  dmesg 确认:
- *    [drm] panel: "xiaomi p81 35 02 0b vid mode dualdsi dsc"
- *    panel type: 1 (BOE, lcd_id GPIO 612 = HIGH)
- *    topology: lm:2 comp_enc:2 intf:2
- *    3 video modes, 120Hz default
- *    panel is tddi
+ *  dmesg: ktz8866 1-0011 / ktz8866 2-0011
+ *  I2C bus 1 (0x98c000) = 主屏, I2C bus 2 (0x880000) = 副屏
  * ═══════════════════════════════════════════════════════════ */
 
-&mdss {
-	status = "okay";
-};
-
-&mdss_mdp {
-	status = "okay";
-};
-
-/* DSI0 — 主控制器 */
-&dsi0 {
-	status = "okay";
-	phys = <&dsi0_phy>;
-	phy-names = "dsi";
-
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			dsi0_panel_in: endpoint {
-				remote-endpoint = <&panel_out0>;
-			};
-		};
-	};
-
-	/* BOE 双 DSI 面板 */
-	panel@0 {
-		compatible = "qcom,mdss-dsi-p81-35-02-0b-dualdsi-dsc-vid";
-		reg = <0>;
-
-		power-supply = <&panel_vddio>;
-		reset-gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&panel_reset_default>;
-
-		port {
-			panel_out0: endpoint {
-				remote-endpoint = <&dsi0_panel_in>;
-			};
-		};
-
-		display-timings {
-			native-mode = <&timing0>;
-
-			timing0: timing0 {
-				/* 120Hz 默认模式 */
-				clock-frequency = <600000000>;
-				hactive = <3200>;
-				vactive = <2136>;
-				hfront-porch = <40>;
-				hback-porch = <40>;
-				hsync-len = <4>;
-				vfront-porch = <8>;
-				vback-porch = <8>;
-				vsync-len = <4>;
-			};
-		};
-	};
-};
-
-&dsi0_phy {
-	status = "okay";
-};
-
-/* DSI1 — 从控制器 */
-&dsi1 {
-	status = "okay";
-	phys = <&dsi1_phy>;
-	phy-names = "dsi";
-
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			dsi1_panel_in: endpoint {
-				remote-endpoint = <&panel_out1>;
-			};
-		};
-	};
-};
-
-&dsi1_phy {
-	status = "okay";
-};
-
-/* ═══════════════════════════════════════════════════════════
- *  背光 — KTZ8866 x2 (I2C)
- *
- *  dmesg 确认:
- *    ktz8866 1-0011: probe sucess end   ← I2C bus 1 (0x98c000)
- *    ktz8866 2-0011: probe sucess end   ← I2C bus 2 (0x880000)
- *    两颗 ktz8866 分别控制主/副屏背光
- * ═══════════════════════════════════════════════════════════ */
-
-/* I2C bus 1 (0x98c000) — 主屏背光 */
 &i2c1 {
 	status = "okay";
 	clock-frequency = <400000>;
@@ -253,7 +139,6 @@
 	};
 };
 
-/* I2C bus 2 (0x880000) — 副屏背光 */
 &i2c2 {
 	status = "okay";
 	clock-frequency = <400000>;
@@ -268,14 +153,10 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  音频 — FS19xx SmartPA x4 (I2C bus 0)
+ *  音频 — FS19xx SmartPA x4
  *
- *  dmesg 确认:
- *    fs16xx 0-0034: i2c probe completed  ← I2C bus 0 (0x980000)
- *    fs16xx 0-0035: i2c probe completed
- *    fs16xx 0-0036: i2c probe completed
- *    fs16xx 0-0037: i2c probe completed
- *    四颗 fs19xx 功放芯片驱动四路扬声器
+ *  dmesg: fs16xx 0-0034/0-0035/0-0036/0-0037
+ *  I2C bus 0 (0x980000)
  * ═══════════════════════════════════════════════════════════ */
 
 &i2c0 {
@@ -308,16 +189,9 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  触摸屏 — Novatek NT36532 (SPI1)
+ *  触摸屏 — Novatek NT36532 (SPI1 @ 0xa88000)
  *
- *  dmesg 确认:
- *    spi_geni a88000.spi: SPI1
- *    [NVT-ts] novatek,irq-gpio=674
- *    [NVT-ts] novatek,lcd_id-gpio=612
- *    [NVT-ts] lcd_id_value = 1, this panel is BOE
- *    [NVT-ts] mode=0, max_speed_hz=19200000
- *    [NVT-ts] Cascade Chip, NVT touch IC
- *    [NVT-ts] novatek,pen-support=1
+ *  dmesg: IRQ GPIO 674, lcd_id GPIO 612 (BOE), pen-support
  * ═══════════════════════════════════════════════════════════ */
 
 &spi1 {
@@ -352,7 +226,7 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  传感器 — IMU + 磁力计 (I2C)
+ *  传感器 — IMU + 磁力计 (I2C bus 12)
  * ═══════════════════════════════════════════════════════════ */
 
 &i2c12 {
@@ -373,94 +247,85 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  蓝牙 — WCN7850 (UART HCI)
+ *  蓝牙 — WCN7850 (UART @ 0x898000, ttyHS0, GPIO 18)
  *
- *  dmesg 确认:
- *    898000.qcom,qup_uart: ttyHS0 @ 0x898000 (IRQ 282)
- *    btqca.ko + hci_uart.ko loaded
- *    HCI UART protocol QCA registered
- *    GPIO 18 used by bt_peach (WCN7850 BT)
- *
- *  注意: GPIO 18 被 BT 和 WiFi (cnss-peach) 同时请求，
- *  高通驱动内部处理此冲突，DTS 中不需要额外配置。
+ *  dmesg: btqca.ko + hci_uart.ko, HCI UART QCA registered
+ *  注意: UART 节点标签需与 sm8750.dtsi 中的定义匹配。
+ *  若 sm8750.dtsi 中不存在 &uart3 标签，需改为路径引用
+ *  或移除此节点，等待 dtsi 更新。
  * ═══════════════════════════════════════════════════════════ */
 
-&uart3 {
-	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart3_bt_default>;
-
-	bluetooth {
-		compatible = "qcom,wcn7850-bt";
-		enable-gpios = <&tlmm 18 GPIO_ACTIVE_HIGH>;
-		max-speed = <3000000>;
-		status = "okay";
-	};
-};
+/*
+ * 暂时注释：sm8750.dtsi (for-next) 可能尚未定义 uart3 标签。
+ * 取消注释前请确认 dtsi 中存在此标签。
+ *
+ * &uart3 {
+ *     status = "okay";
+ *     pinctrl-names = "default";
+ *     pinctrl-0 = <&uart3_bt_default>;
+ *
+ *     bluetooth {
+ *         compatible = "qcom,wcn7850-bt";
+ *         enable-gpios = <&tlmm 18 GPIO_ACTIVE_HIGH>;
+ *         max-speed = <3000000>;
+ *         status = "okay";
+ *     };
+ * };
+ */
 
 /* ═══════════════════════════════════════════════════════════
- *  UFS 存储
+ *  UFS 存储 — ufshc @ 0x1d84000
  *
- *  dmesg 确认:
- *    ufshc @ 0x1d84000
- *    ufsphy_mem @ 0x1d80000
- * ═══════════════════════════════════════════════════════════ */
-
-&ufs_mem_hc {
-	status = "okay";
-};
-
-&ufs_mem_phy {
-	status = "okay";
-};
+ *  暂时注释：等待 sm8750.dtsi 定义 ufs_mem_hc / ufs_mem_phy 标签。
+ *
+ *  &ufs_mem_hc { status = "okay"; };
+ *  &ufs_mem_phy { status = "okay"; };
+ */
 
 /* ═══════════════════════════════════════════════════════════
- *  WiFi — WCN7850 (PCIe)
+ *  WiFi — WCN7850 (PCIe RC0 @ 0x1c00000)
  *
- *  dmesg 确认:
- *    pci-msm 1c00000.pcie: PCIe RC0
- *    cnss2 b0000000.qcom,cnss-peach
- *    PCIe RC0 link initialized
- *    cnss_wlan_region: 32MB reserved
- * ═══════════════════════════════════════════════════════════ */
-
-&pcie0 {
-	status = "okay";
-
-	perst-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pcie0_default>;
-
-	phys = <&pcie0_phy>;
-	phy-names = "pciephy";
-
-	vddpe-supply = <&wlan_en>;
-};
-
-&pcie0_phy {
-	status = "okay";
-};
+ *  暂时注释：等待 sm8750.dtsi 定义 pcie0 / pcie0_phy 标签。
+ *
+ *  &pcie0 {
+ *      status = "okay";
+ *      perst-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
+ *      pinctrl-names = "default";
+ *      pinctrl-0 = <&pcie0_default>;
+ *      phys = <&pcie0_phy>;
+ *      phy-names = "pciephy";
+ *      vddpe-supply = <&wlan_en>;
+ *  };
+ *  &pcie0_phy { status = "okay"; };
+ */
 
 /* ═══════════════════════════════════════════════════════════
- *  Pinmux 配置
+ *  GPU / 显示 — 等待 sm8750.dtsi 提供标签后启用
  *
- *  GPIO 编号已通过 dmesg 验证:
- *    GPIO 45: panel VDDIO enable
- *    GPIO 46: panel reset
- *    GPIO 674: touch IRQ
- *    GPIO 612: touch lcd_id (BOE panel)
- *    GPIO 700: touch reset
- *    GPIO 607: touch status
- *    GPIO 99: WLAN enable
- *    GPIO 100: PCIe PERST
- *    GPIO 18: BT enable (WCN7850)
- *    GPIO 42/43: debug UART
+ *  需要的标签: &gpu, &mdss, &mdss_mdp, &dsi0, &dsi1,
+ *              &dsi0_phy, &dsi1_phy, &gmu
+ *
+ *  面板 compatible (dmesg 确认):
+ *    "qcom,mdss-dsi-p81-35-02-0b-dualdsi-dsc-vid"
+ *  panel type: 1 (BOE), topology: lm:2 comp_enc:2 intf:2
+ */
+
+/* ═══════════════════════════════════════════════════════════
+ *  Pinmux — 所有 GPIO 编号已通过 dmesg 验证
+ *
+ *  GPIO 45:  panel VDDIO enable
+ *  GPIO 46:  panel reset
+ *  GPIO 674: touch IRQ
+ *  GPIO 612: touch lcd_id (BOE)
+ *  GPIO 700: touch reset
+ *  GPIO 607: touch status
+ *  GPIO 99:  WLAN enable
+ *  GPIO 100: PCIe PERST
+ *  GPIO 18:  BT enable (WCN7850, 与 WiFi 共享)
+ *  GPIO 42/43: debug UART
  * ═══════════════════════════════════════════════════════════ */
 
 &tlmm {
-	/* ── 面板 ────────────────────────────────────────── */
-
 	panel_vddio_default: panel-vddio-default {
 		pins = "gpio45";
 		function = "gpio";
@@ -475,16 +340,12 @@
 		bias-disable;
 	};
 
-	/* ── 触摸屏 ──────────────────────────────────────── */
-
 	ts_spi_default: ts-spi-default {
 		pins = "gpio674", "gpio700", "gpio607";
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-up;
 	};
-
-	/* ── 调试串口 (UART14, 0xa9c000) ────────────────── */
 
 	uart14_default: uart14-default {
 		pins = "gpio42", "gpio43";
@@ -493,19 +354,15 @@
 		bias-disable;
 	};
 
-	/* ── 蓝牙串口 (UART @ 0x898000, ttyHS0) ───────────
-	 *  GPIO 16/17 = TX/RX
-	 *  GPIO 18 = BT enable (WCN7850, 与 WiFi 共享)
-	 *  GPIO 19 = CTS/RTS
+	/*
+	 * BT UART (0x898000) pinmux — 等待确认 QUP SE 编号后启用
+	 * uart3_bt_default: uart3-bt-default {
+	 *     pins = "gpio16", "gpio17", "gpio18", "gpio19";
+	 *     function = "qup_se3_uart";
+	 *     drive-strength = <6>;
+	 *     bias-pull-up;
+	 * };
 	 */
-	uart3_bt_default: uart3-bt-default {
-		pins = "gpio16", "gpio17", "gpio18", "gpio19";
-		function = "qup_se3_uart";
-		drive-strength = <6>;
-		bias-pull-up;
-	};
-
-	/* ── PCIe (WiFi) ─────────────────────────────────── */
 
 	pcie0_default: pcie0-default {
 		pins = "gpio100";
@@ -513,8 +370,6 @@
 		drive-strength = <8>;
 		bias-disable;
 	};
-
-	/* ── WLAN 使能 ───────────────────────────────────── */
 
 	wlan_en_default: wlan-en-default {
 		pins = "gpio99";
