@@ -209,13 +209,7 @@ build_boot() {
         log "首次下载 BusyBox 并缓存（官方源）..."
         wget --timeout=30 --tries=3 -q \
             "https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" \
-            -O "$BUSYBOX_CACHE" || {
-            # 备用源：GitHub releases
-            warn "busybox.net 下载失败，尝试备用源..."
-            wget --timeout=30 --tries=3 -q \
-                "https://github.com/ptitSeb/box86/blob/master/tests/bash/busybox?raw=true" \
-                -O "$BUSYBOX_CACHE" || err "BusyBox 下载失败，请手动放置到 cache/busybox-aarch64"
-        }
+            -O "$BUSYBOX_CACHE" || err "BusyBox 下载失败，请手动从 https://busybox.net 下载并放置到 cache/busybox-aarch64"
         cp "$BUSYBOX_CACHE" "$BUILD/"
     fi
 
