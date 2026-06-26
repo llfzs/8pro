@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-kernel:
     runs-on: ubuntu-latest

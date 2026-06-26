@@ -1,5 +1,15 @@
 # Build output
 build/
+out/
+
+# Cache
+cache/
+
+# Third-party sources
+third_party/
+
+# APT cache (CI)
+.apt-cache/
 
 # Temporary files
 *.tmp

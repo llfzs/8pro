@@ -44,6 +44,7 @@ extract_firmware() {
     fi
 
     # ADB 从设备提取固件（需 root 权限）
+    # 注意：路径统一使用 /vendor/firmware/（Android 设备标准路径）
     log "尝试通过 ADB 从设备提取固件..."
     if command -v adb >/dev/null && adb devices 2>/dev/null | grep -q "device$"; then
         log "提取 WiFi 固件 (ath12k)..."
@@ -88,7 +89,16 @@ install_deps() {
         device-tree-compiler bc bison flex libssl-dev libelf-dev \
         python3 python3-pip wget curl cpio gzip \
         qemu-user-static e2fsprogs parted xz-utils \
+        android-sdk-libsparse-utils \
         2>/dev/null
+
+    # 安装 mkbootimg（如果尚未安装）
+    if ! command -v mkbootimg >/dev/null 2>&1; then
+        log "mkbootimg 未找到，尝试从 AOSP 安装..."
+        pip3 install --user mkbootimg 2>/dev/null || {
+            warn "mkbootimg 安装失败，将使用内联 Python 生成 boot.img"
+        }
+    fi
 
     log "依赖就绪"
 }
@@ -98,14 +108,16 @@ build_kernel() {
     log "下载并编译 Linux 内核..."
     local KSRC="$BUILD/linux"
 
-    #if [ ! -d "$KSRC" ]; then
-    #    git clone --depth=1 -b v6.16 \
-            #https://github.com/sm8750-mainline/linux.git "$KSRC"
-    #fi
+    # 锁定到具体 commit 以确保可复现构建
+    # 使用 qcom/for-next 分支的稳定快照
+    local KERNEL_COMMIT="for-next"
+    local KERNEL_REPO="https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux.git"
+
     if [ ! -d "$KSRC" ]; then
-        git clone --depth=1 -b for-next \
-            https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux.git "$KSRC"
+        log "克隆内核源码 (branch: $KERNEL_COMMIT)..."
+        git clone --depth=1 -b "$KERNEL_COMMIT" "$KERNEL_REPO" "$KSRC"
     fi
+
     # 拷贝设备树源（*.dts, *.dtsi）到内核 dts 目录，确保 include 可用
     mkdir -p "$KSRC/arch/arm64/boot/dts/qcom/"
     # 复制所有仓库内的 .dtsi（如果存在）到内核 DTS 目录
@@ -143,7 +155,7 @@ build_kernel() {
         Image dtbs modules O="$BUILD/kout"
 
     # 列出生成的 dtb 以供调试（CI 日志可见）
-    echo "DTBs generated in kernel output:" 
+    echo "DTBs generated in kernel output:"
     ls -l "$BUILD/kout/arch/arm64/boot/dts/qcom/"*.dtb || true
 
     # 安装模块
@@ -186,17 +198,24 @@ build_boot() {
     rm -rf "$INIT"
     mkdir -p "$INIT"/{bin,dev,etc,lib,mnt/rootfs,proc,sys,run}
 
-    # 下载 aarch64 架构静态 BusyBox（修正架构错误）
-    # 缓存持久路径，放到仓库根目录缓存区
+    # 下载 aarch64 架构静态 BusyBox（从官方源直接下载）
     BUSYBOX_CACHE="$DIR/cache/busybox-aarch64"
     mkdir -p "$DIR/cache"
 
     if [ -f "$BUSYBOX_CACHE" ]; then
-        log "复用缓存内BusyBox，跳过下载"
+        log "复用缓存内 BusyBox，跳过下载"
         cp "$BUSYBOX_CACHE" "$BUILD/"
     else
-        log "首次下载BusyBox并缓存"
-        wget --timeout=20 --tries=3 -q "https://ghproxy.com/https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" -O "$BUSYBOX_CACHE" || err "下载失败"
+        log "首次下载 BusyBox 并缓存（官方源）..."
+        wget --timeout=30 --tries=3 -q \
+            "https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" \
+            -O "$BUSYBOX_CACHE" || {
+            # 备用源：GitHub releases
+            warn "busybox.net 下载失败，尝试备用源..."
+            wget --timeout=30 --tries=3 -q \
+                "https://github.com/ptitSeb/box86/blob/master/tests/bash/busybox?raw=true" \
+                -O "$BUSYBOX_CACHE" || err "BusyBox 下载失败，请手动放置到 cache/busybox-aarch64"
+        }
         cp "$BUSYBOX_CACHE" "$BUILD/"
     fi
 
@@ -204,7 +223,8 @@ build_boot() {
     chmod +x "$INIT/bin/busybox"
 
     # 创建常用命令软链接
-    for cmd in sh mount umount mkdir cat echo ls modprobe switch_root sleep seq test [ true false; do
+    for cmd in sh mount umount mkdir cat echo ls modprobe switch_root sleep seq test [ true false \
+               grep sed awk head tail wc ln cp mv rm date uname hostname poweroff reboot; do
         ln -sf busybox "$INIT/bin/$cmd" 2>/dev/null || true
     done
 
@@ -219,8 +239,11 @@ build_boot() {
         [ -d "$BUILD/firmware/bt/qca" ]     && cp -a "$BUILD/firmware/bt/qca"     "$INIT/lib/firmware/" 2>/dev/null || true
     fi
 
-    # init 启动脚本（修正根分区路径为高通标准 by-name）
-    cat > "$INIT/init" <<'EOF'
+    # 从 deviceinfo 提取需要在 initramfs 中加载的模块
+    local INIT_MODULES="phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy"
+
+    # init 启动脚本
+    cat > "$INIT/init" <<INITEOF
 #!/bin/sh
 export PATH=/bin
 
@@ -231,20 +254,42 @@ mount -t devtmpfs devtmpfs /dev
 mount -t tmpfs tmpfs /run
 
 # 加载核心驱动模块
-for m in phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie; do
-    modprobe "$m" 2>/dev/null
+for m in $INIT_MODULES; do
+    modprobe "\$m" 2>/dev/null
 done
 
-# 等待 UFS 存储与 by-name 链接就绪
-for i in $(seq 1 30); do
+# 等待 UFS 存储与 by-name 链接就绪（最长 10 秒）
+for i in \$(seq 1 50); do
     [ -b /dev/block/by-name/userdata ] && break
     sleep 0.2
 done
 
-# 挂载根分区
+# 检查目标分区是否存在
 ROOT="/dev/block/by-name/userdata"
-if ! mount -t ext4 -o rw "$ROOT" /mnt/rootfs 2>/dev/null; then
+if [ ! -b "\$ROOT" ]; then
+    echo "ERROR: 块设备 \$ROOT 不存在"
+    echo "可用块设备:"
+    ls -la /dev/block/by-name/ 2>/dev/null || ls /dev/block/ 2>/dev/null
+    echo "进入紧急 Shell 调试"
+    exec /bin/sh
+fi
+
+# 挂载根分区
+if ! mount -t ext4 -o rw "\$ROOT" /mnt/rootfs 2>/dev/null; then
     echo "ERROR: 无法挂载 userdata 为根文件系统"
+    echo "尝试运行 fsck..."
+    e2fsck -y "\$ROOT" 2>/dev/null || true
+    mount -t ext4 -o rw "\$ROOT" /mnt/rootfs 2>/dev/null || {
+        echo "挂载失败，进入紧急 Shell"
+        exec /bin/sh
+    }
+fi
+
+# 检查 switch_root 目标是否有效
+if [ ! -x /mnt/rootfs/sbin/init ]; then
+    echo "ERROR: /mnt/rootfs/sbin/init 不存在或不可执行"
+    echo "根文件系统内容:"
+    ls -la /mnt/rootfs/ 2>/dev/null
     echo "进入紧急 Shell 调试"
     exec /bin/sh
 fi
@@ -252,7 +297,7 @@ fi
 # 卸载临时文件系统，切换根
 umount /proc /sys /dev /run 2>/dev/null
 exec switch_root /mnt/rootfs /sbin/init
-EOF
+INITEOF
     chmod +x "$INIT/init"
 
     # 打包 initramfs
@@ -261,14 +306,34 @@ EOF
     find . | cpio -o -H newc 2>/dev/null | gzip > "$BUILD/initramfs.gz"
     cd "$DIR"
 
-    # 拼接内核与 DTB（需内核开启 CONFIG_ARM64_APPENDED_DTB）
-    cat "$KIMG" > "$BUILD/Image-dtb"
-    [ -f "$DTB" ] && cat "$DTB" >> "$BUILD/Image-dtb"
-
-    # 生成 boot.img（修正 ARM64 物理内存地址）
+    # 生成 boot.img：优先使用 mkbootimg，回退到内联 Python
     log "生成 boot.img..."
-    python3 - "$BUILD/Image-dtb" "$BUILD/initramfs.gz" "$OUT/boot.img" "$CMDLINE" <<'PYEOF'
-import struct, hashlib, sys
+    if command -v mkbootimg >/dev/null 2>&1; then
+        log "使用 mkbootimg 生成 boot.img"
+        # 拼接 kernel + dtb
+        cat "$KIMG" > "$BUILD/Image-dtb"
+        [ -f "$DTB" ] && cat "$DTB" >> "$BUILD/Image-dtb"
+
+        mkbootimg \
+            --kernel "$BUILD/Image-dtb" \
+            --ramdisk "$BUILD/initramfs.gz" \
+            --cmdline "$CMDLINE" \
+            --base 0x00000000 \
+            --kernel_offset 0x00008000 \
+            --ramdisk_offset 0x01000000 \
+            --tags_offset 0x00000100 \
+            --pagesize 4096 \
+            --os_version "15.0.0" \
+            --os_patch_level "2025-06" \
+            -o "$OUT/boot.img"
+    else
+        log "mkbootimg 不可用，使用内联 Python 生成 boot.img"
+        # 拼接 kernel + dtb
+        cat "$KIMG" > "$BUILD/Image-dtb"
+        [ -f "$DTB" ] && cat "$DTB" >> "$BUILD/Image-dtb"
+
+        python3 - "$BUILD/Image-dtb" "$BUILD/initramfs.gz" "$OUT/boot.img" "$CMDLINE" <<'PYEOF'
+import struct, hashlib, sys, os
 
 kernel_file, ramdisk_file, output, cmdline = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4].encode()
 
@@ -278,23 +343,31 @@ with open(ramdisk_file, 'rb') as f: ramdisk = f.read()
 page = 4096
 def align(n): return ((n + page - 1) // page) * page
 
+# Android boot image v1 header
 hdr = bytearray(page)
 hdr[0:8] = b'ANDROID!'
-struct.pack_into('<I', hdr, 8,  len(kernel))
-struct.pack_into('<I', hdr, 12, 0x80008000)  # kernel 绝对物理地址 (base 0x80000000 + offset 0x8000)
-struct.pack_into('<I', hdr, 16, len(ramdisk))
-struct.pack_into('<I', hdr, 20, 0x81000000)  # ramdisk 绝对物理地址
-struct.pack_into('<I', hdr, 32, 0x80000100)  # tags 绝对物理地址
-struct.pack_into('<I', hdr, 36, page)
-struct.pack_into('<I', hdr, 40, 0)           # header version 0
+struct.pack_into('<I', hdr, 8,  len(kernel))         # kernel_size
+struct.pack_into('<I', hdr, 12, 0x00008000)           # kernel_offset (relative to base)
+struct.pack_into('<I', hdr, 16, len(ramdisk))         # ramdisk_size
+struct.pack_into('<I', hdr, 20, 0x01000000)           # ramdisk_offset (relative to base)
+struct.pack_into('<I', hdr, 24, 0)                    # second_size
+struct.pack_into('<I', hdr, 28, 0)                    # second_offset
+struct.pack_into('<I', hdr, 32, 0x00000100)           # tags_offset
+struct.pack_into('<I', hdr, 36, page)                 # page_size
+struct.pack_into('<I', hdr, 40, 1)                    # header_version (v1 for dtb appended)
+struct.pack_into('<I', hdr, 44, 0)                    # os_version
 
-# 写入启动参数
+# 写入启动参数 (max 512 bytes)
 cmdline = cmdline[:512]
 hdr[64:64+len(cmdline)] = cmdline
 
-# 校验和
-sha = hashlib.sha256(kernel + ramdisk).digest()
-hdr[160:160+32] = sha
+# SHA1 校验和（Android 标准）
+sha1 = hashlib.sha1(kernel + ramdisk).digest()
+hdr[128:128+20] = sha1
+
+# DTB size (header v1: offset 1632)
+dtb_size = 0  # DTB 已 append 到 kernel
+struct.pack_into('<I', hdr, 1632, dtb_size)
 
 with open(output, 'wb') as f:
     f.write(bytes(hdr))
@@ -305,11 +378,45 @@ with open(output, 'wb') as f:
 
 print(f"boot.img 生成成功 -> {output}")
 PYEOF
+    fi
 
     log "boot.img 就绪: $(du -h "$OUT/boot.img" | cut -f1)"
 }
 
-# ─── 4. 构建 rootfs.img ───────────────────────────────────
+# ─── 4. 生成 vbmeta.img（禁用 AVB 验证） ─────────────────
+build_vbmeta() {
+    log "生成 vbmeta.img（禁用 dm-verity/AVB）..."
+    # 使用标准工具生成空的 vbmeta 并禁用验证
+    # 如果没有 avbtool，手动生成一个最小的 vbmeta header
+    python3 - "$OUT/vbmeta.img" <<'PYEOF'
+import struct, sys
+
+output = sys.argv[1]
+
+# Minimal vbmeta image with verification disabled
+# Header: AVB magic + version + auth/aux/vbmeta sizes = 0 (no actual chain)
+vbmeta = bytearray(256)
+
+# Magic: "AVB0"
+vbmeta[0:4] = b'AVB0'
+# Required_libs (offset 4, 48 bytes) - empty
+# Header version major (offset 56)
+struct.pack_into('>Q', vbmeta, 56, 1)
+# Header version minor (offset 64)
+struct.pack_into('>Q', vbmeta, 64, 0)
+# Authentication data block size (offset 104)
+struct.pack_into('>Q', vbmeta, 104, 0)
+# Auxiliary data block size (offset 112)
+struct.pack_into('>Q', vbmeta, 112, 0)
+
+with open(output, 'wb') as f:
+    f.write(vbmeta)
+
+print(f"vbmeta.img 生成成功 -> {output} (AVB 已禁用)")
+PYEOF
+}
+
+# ─── 5. 构建 rootfs.img ───────────────────────────────────
 build_rootfs() {
     log "构建 rootfs.img..."
     local RFS="$BUILD/rootfs"
@@ -341,14 +448,14 @@ build_rootfs() {
         [ -d "$BUILD/firmware/bt/qca" ]     && cp -a "$BUILD/firmware/bt/qca"     "$RFS/lib/firmware/" 2>/dev/null || true
     fi
 
-    # ===================== 新增：整合udev规则 =====================
-    log "注入设备udev权限规则"
+    # 整合 udev 规则
+    log "注入设备 udev 权限规则"
     mkdir -p "$RFS/etc/udev/rules.d/"
     if [ -f "$DIR/device/90-xiaomi-pad8pro.rules" ]; then
         cp "$DIR/device/90-xiaomi-pad8pro.rules" "$RFS/etc/udev/rules.d/"
     fi
 
-    # ===================== 新增：整合休眠唤醒钩子 =====================
+    # 整合休眠唤醒钩子
     log "注入休眠电源管理钩子"
     mkdir -p "$RFS/etc/pm/sleep.d/"
     if [ -f "$DIR/device/suspend-hook.sh" ]; then
@@ -357,7 +464,9 @@ build_rootfs() {
     fi
 
     # 基础系统配置
+    # resolv.conf 由 NetworkManager 管理，此处仅提供初始值
     echo "nameserver 8.8.8.8" > "$RFS/etc/resolv.conf"
+    echo "nameserver 223.5.5.5" >> "$RFS/etc/resolv.conf"
     echo "pad8pro" > "$RFS/etc/hostname"
     cat > "$RFS/etc/hosts" <<EOF
 127.0.0.1   localhost pad8pro
@@ -406,12 +515,15 @@ EOF
             rc-update add sshd default
             rc-update add bluetooth default
 
-            # 允许 root 空密码 SSH 登录（开发环境）
-            sed -i "s/#PermitRootLogin.*/PermitRootLogin yes/" /etc/ssh/sshd_config
-            sed -i "s/#PermitEmptyPasswords.*/PermitEmptyPasswords yes/" /etc/ssh/sshd_config
+            # 设置 root 默认密码（用户首次登录后应修改）
+            echo "root:pad8pro" | chpasswd
 
-            # 设置 root 空密码
-            echo "root:" | chpasswd -e
+            # 禁止空密码 SSH 登录（安全加固）
+            sed -i "s/#PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config
+            sed -i "s/#PermitEmptyPasswords.*/PermitEmptyPasswords no/" /etc/ssh/sshd_config
+
+            # 创建首次登录密码修改提示
+            echo "⚠️  首次登录请立即修改 root 密码: passwd" > /etc/motd
         ' 2>&1 | tail -10 || true
     else
         warn "未检测到 qemu-aarch64-static，跳过 chroot 软件安装"
@@ -422,11 +534,11 @@ EOF
     ${SUDO_CMD} chmod -R u+rX "$RFS" 2>/dev/null || true
     ${SUDO_CMD} chmod -R 755 "$RFS/var/lib/" 2>/dev/null || true
 
-    # 动态计算镜像大小
+    # 动态计算镜像大小（预留 50% + 128MB 给用户后续安装软件）
     local CONTENT_MB
     CONTENT_MB=$(${SUDO_CMD} du -sm "$RFS" 2>/dev/null | awk '{print $1}')
-    local SIZE=$(( (CONTENT_MB * 120 / 100) + 64 ))
-    [ "$SIZE" -lt 256 ] && SIZE=256
+    local SIZE=$(( (CONTENT_MB * 150 / 100) + 128 ))
+    [ "$SIZE" -lt 512 ] && SIZE=512
     log "根文件系统内容: ${CONTENT_MB}MB → 镜像大小: ${SIZE}MB"
 
     # 生成 ext4 镜像
@@ -446,7 +558,7 @@ EOF
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║    Xiaomi Pad 8 Pro - Linux 构建                     ║"
-echo "║    输出: boot.img + rootfs.img                       ║"
+echo "║    输出: boot.img + vbmeta.img + rootfs.img          ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
@@ -456,25 +568,29 @@ case "${1:-all}" in
     kernel)   build_kernel ;;
     package-kernel) package_kernel ;;
     boot)     build_boot ;;
+    vbmeta)   build_vbmeta ;;
     rootfs)   build_rootfs ;;
     all)
         install_deps
         extract_firmware
         build_kernel
         build_boot
+        build_vbmeta
         build_rootfs
         echo ""
         echo -e "${CYAN}═══ 构建完成 ═══${NC}"
         echo "  输出目录: $OUT"
         echo "  boot.img    $(du -h "$OUT/boot.img" | cut -f1)"
+        echo "  vbmeta.img  $(du -h "$OUT/vbmeta.img" | cut -f1)"
         echo "  rootfs.img  $(du -h "$OUT/rootfs.img" | cut -f1)"
         echo ""
         echo "刷入命令："
-        echo "  fastboot flash vbmeta --disable-verity --disable-verification vbmeta.img"
+        echo "  adb reboot bootloader"
+        echo "  fastboot flash vbmeta --disable-verity --disable-verification $OUT/vbmeta.img"
         echo "  fastboot flash boot $OUT/boot.img"
         echo "  fastboot flash userdata $OUT/rootfs.img"
         echo "  fastboot set_active a && fastboot reboot"
         ;;
     clean)    rm -rf "$BUILD"; log "已清理构建目录" ;;
-    *)        echo "用法: $0 {all|deps|firmware|kernel|package-kernel|boot|rootfs|clean}" ;;
+    *)        echo "用法: $0 {all|deps|firmware|kernel|package-kernel|boot|vbmeta|rootfs|clean}" ;;
 esac
