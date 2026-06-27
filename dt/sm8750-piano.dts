@@ -8,7 +8,7 @@
  * Hardware summary (verified from dmesg):
  *   SoC:       SM8750-AB (Snapdragon 8 Elite)
  *   Display:   11.2" 3200x2136 dual-DSI DSC LCD (BOE, panel: xiaomi p81 35 02 0b)
- *   GPU:       Adreno 830 (a680)
+ *   GPU:       Adreno 830 (a680, 固件: gen80600_gmu.bin)
  *   WiFi:      WCN7850 (ath12k, PCIe RC0 @ 0x1c00000)
  *   BT:        WCN7850 (btqca, UART 待确认)
  *   Touch:     Novatek NT36532 (SPI1 @ 0xa88000, IRQ GPIO 674)
@@ -37,7 +37,7 @@
 
 / {
 	model = "Xiaomi Pad 8 Pro";
-	compatible = "qcom,sm8750-piano", "qcom,sm8750";
+	compatible = "xiaomi,piano", "qcom,sm8750-piano", "qcom,sm8750";
 	chassis-type = "tablet";
 
 	aliases {
