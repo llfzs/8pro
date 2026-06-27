@@ -1,5 +1,5 @@
 # postmarketOS kernel config fragment for Xiaomi Pad 8 Pro (SM8750)
-# 仅补充上游 defconfig 未默认开启的设备专属配置
+# 参考 Android 设备原始 config + dmesg 补充上游 defconfig 未默认开启的设备专属配置
 
 # ── 启动显示：simplefb + 帧缓冲控制台（启动日志上屏核心） ──
 CONFIG_FB=y
@@ -34,13 +34,26 @@ CONFIG_DRM_MSM_DSI_HELPER=y
 # 固件路径: /lib/firmware/qcom/a680_zap.mbn
 CONFIG_DRM_MSM_GPU_STATE=y
 
-# ── 存储：UFS 物理层补充 ──
-CONFIG_PHY_QCOM_QMP_UFS=y
-CONFIG_SCSI_UFS_QCOM=y
+# ── 存储：UFS ──
+# 设备使用 phy_qcom_ufs_qmp_v4_sun，qcom_defconfig 应已包含基础 UFS 支持
+# 补充平台驱动确保兼容
+CONFIG_SCSI_UFSHCD_PLATFORM=y
+CONFIG_SCSI_UFS_DWC_TC_PLATFORM=y
 
-# ── PCIe WiFi (WCN7850) ──
+# ── NVMe（设备支持 NVMe SSD） ──
+CONFIG_NVME_CORE=y
+CONFIG_BLK_DEV_NVME=y
+CONFIG_NVME_MULTIPATH=y
+
+# ── PCIe ──
+# WiFi 需要 PCIe + PHY，设备使用 DesignWare PCIe 控制器
 CONFIG_PHY_QCOM_QMP_PCIE=y
 CONFIG_PCIE_QCOM=y
+CONFIG_PCIE_DW=y
+CONFIG_PCIE_DW_HOST=y
+CONFIG_PCIE_DW_PLAT=y
+
+# ── PCIe WiFi (WCN7850) ──
 CONFIG_ATH12K=m
 CONFIG_ATH12K_PCI=m
 
@@ -54,22 +67,24 @@ CONFIG_BT_HCIUART_H4=y
 CONFIG_BT_HCIUART_QCA=y
 CONFIG_RFKILL=y
 
-# ── 触控 — Novatek NT36532 ──
+# ── 触控与输入 ──
+# 设备有两套触控方案：
+#   1. Novatek NT36532 (SPI, IRQ 674) — 主触控面板
+#   2. HID multitouch (Xiaomi Touch, 15D9:00A1) — 虚拟 HID 触控
+# 同时有 HID 键盘/鼠标/触控板 (Xiaomi Keyboard/Mouse/Touch/Consumer)
 CONFIG_TOUCHSCREEN_FTS=m
-# 若主线无 novatek 驱动，需自行编译或使用通用 SPI 触摸框架
 CONFIG_INPUT_TOUCHSCREEN=y
 CONFIG_SPI=y
+CONFIG_HID_MULTITOUCH=y
+CONFIG_I2C_HID=y
+CONFIG_INPUT_EVDEV=y
+CONFIG_INPUT_UINPUT=y
 
 # ── 背光 — KTZ8866 ──
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 CONFIG_BACKLIGHT_KTZ8866=m
 
-# ── 传感器 ──
-CONFIG_ST_LSM6DSO=m
-CONFIG_LIS2MDL=m
-
 # ── USB 功能补充 ──
-CONFIG_USB_CONFIGFS_RNDIS=y
 CONFIG_USB_CONFIGFS_NCM=y
 CONFIG_USB_ROLE_SWITCH=y
 CONFIG_USB_DWC3=y
@@ -77,14 +92,31 @@ CONFIG_PHY_QCOM_QMP_USB=y
 
 # ── 电源与充电 ──
 CONFIG_REGULATOR_QCOM_RPMH=y
-CONFIG_BATTERY_QCOM_BMS=y
 CONFIG_THERMAL_QCOM_SPMI_ADC_TM5=y
-CONFIG_CHARGER_QCOM_SPMI=y
+
+# ── NVMEM（eFuse/QFPROM 访问） ──
+CONFIG_NVMEM=y
+CONFIG_NVMEM_SYSFS=y
+
+# ── F2FS 文件系统（设备 userdata 支持 F2FS） ──
+CONFIG_F2FS_FS=y
+CONFIG_F2FS_FS_POSIX_ACL=y
+CONFIG_F2FS_FS_SECURITY=y
+CONFIG_F2FS_FS_XATTR=y
+CONFIG_F2FS_FS_COMPRESSION=y
+CONFIG_F2FS_FS_LZ4=y
+CONFIG_F2FS_FS_LZ4HC=y
+CONFIG_F2FS_FS_LZO=y
+CONFIG_F2FS_FS_LZORLE=y
+CONFIG_F2FS_FS_ZSTD=y
+CONFIG_F2FS_STAT_FS=y
+CONFIG_F2FS_IOSTAT=y
 
 # ── 调试与启动参数 ──
 CONFIG_EARLYCON=y
 CONFIG_CMDLINE_EXTEND=y
 CONFIG_PRINTK=y
+CONFIG_PRINTK_TIME=y
 CONFIG_ARM64_APPENDED_DTB=y
 
 # ── GPIO / Pinctrl ──

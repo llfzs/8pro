@@ -74,10 +74,8 @@ deviceinfo_nonfree_firmware_files="
     ath12k/WCN7850/hw2.0/amss.bin
     ath12k/WCN7850/hw2.0/m3.bin
     qca/gngbtfw20.mbn
-    qca/gngbtnv20.bin
-    qca/gngperifw20.mbn
-    qca/gngperinv20.bin
-    qcom/a680_zap.mbn
+    qca/gngbtnv10.bin
+    qcom/gen80600_gmu.bin
 "
 
 # ── Additional device info ────────────────────────
@@ -98,7 +96,7 @@ Hardware details (verified from dmesg):
 - GPU: Adreno 830 (freedreno / a680)
 - WiFi: WCN7850 (ath12k, PCIe)
 - Bluetooth: WCN7850 (btqca, GENI UART)
-- Touch: Novatek nt36532 (SPI, IRQ 674)
+- Touch: Novatek NT36532 (SPI, IRQ 674) + HID multitouch (Xiaomi Touch, 15D9:00A1)
 - Storage: UFS (KIOXIA)
 - PMIC: PM8750 with battery charging
 - Backlight: ktz8866 (I2C)
