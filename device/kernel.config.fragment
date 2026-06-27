@@ -1,128 +1,35 @@
-# postmarketOS kernel config fragment for Xiaomi Pad 8 Pro (SM8750)
-# 参考 Android 设备原始 config + dmesg 补充上游 defconfig 未默认开启的设备专属配置
+# Minimal kernel config fragment for Xiaomi Pad 8 Pro
+# 目标：串口输出 + UFS 存储 + 基本启动
+# 其余外设配置全部移除，验证通过后再逐步添加
 
-# ── 启动显示：simplefb + 帧缓冲控制台（启动日志上屏核心） ──
+# ── 调试与串口 ──
+CONFIG_EARLYCON=y
+CONFIG_CMDLINE_EXTEND=y
+CONFIG_PRINTK=y
+CONFIG_PRINTK_TIME=y
+CONFIG_SERIAL_MSM_GENI=y
+CONFIG_SERIAL_MSM_GENI_CONSOLE=y
+
+# ── 帧缓冲控制台（可选，串口通了再开） ──
 CONFIG_FB=y
 CONFIG_FB_SIMPLE=y
 CONFIG_FB_CMDLINE=y
 CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
-CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 CONFIG_FONT_8x16=y
 
-# ── DRM 显示与 fbdev 模拟（原生面板驱动加载后接管） ──
-CONFIG_DRM=y
-CONFIG_DRM_MSM=y
-CONFIG_DRM_MSM_DSI=y
-CONFIG_DRM_MSM_GPU=y
-CONFIG_DRM_FBDEV_EMULATION=y
-CONFIG_DRM_DISPLAY_HELPER=y
-CONFIG_DRM_BRIDGE=y
-CONFIG_DRM_PANEL=y
-
-# ── DSI 面板驱动 ──
-# 小米 Pad 8 Pro 使用双 DSI 面板，需要对应的面板驱动。
-# 若主线内核无现成驱动，需自行编写 panel-xiaomi-p81.c。
-# 以下为通用 DSI 面板支持：
-CONFIG_DRM_MSM_DSI_HELPER=y
-
-# ── GPU — Adreno 830 (a680) ──
-# DRM_MSM_GPU 已在上方启用。
-# Adreno a680 需要 ZAP shader 固件 (a680_zap.mbn)。
-# 固件路径: /lib/firmware/qcom/a680_zap.mbn
-CONFIG_DRM_MSM_GPU_STATE=y
-
-# ── 存储：UFS ──
-# 设备使用 phy_qcom_ufs_qmp_v4_sun，qcom_defconfig 应已包含基础 UFS 支持
-# 补充平台驱动确保兼容
+# ── UFS 存储 ──
+CONFIG_SCSI_UFSHCD=y
 CONFIG_SCSI_UFSHCD_PLATFORM=y
-CONFIG_SCSI_UFS_DWC_TC_PLATFORM=y
 
-# ── NVMe（设备支持 NVMe SSD） ──
-CONFIG_NVME_CORE=y
-CONFIG_BLK_DEV_NVME=y
-CONFIG_NVME_MULTIPATH=y
+# ── 基本块设备 ──
+CONFIG_BLK_DEV_SD=y
 
-# ── PCIe ──
-# WiFi 需要 PCIe + PHY，设备使用 DesignWare PCIe 控制器
-CONFIG_PHY_QCOM_QMP_PCIE=y
-CONFIG_PCIE_QCOM=y
-CONFIG_PCIE_DW=y
-CONFIG_PCIE_DW_HOST=y
-CONFIG_PCIE_DW_PLAT=y
-
-# ── PCIe WiFi (WCN7850) ──
-CONFIG_ATH12K=m
-CONFIG_ATH12K_PCI=m
-
-# ── 蓝牙 (WCN7850 via UART HCI) ──
-CONFIG_BT=y
-CONFIG_BT_BREDR=y
-CONFIG_BT_LE=y
-CONFIG_BT_QCA=m
-CONFIG_BT_HCIUART=m
-CONFIG_BT_HCIUART_H4=y
-CONFIG_BT_HCIUART_QCA=y
-CONFIG_RFKILL=y
-
-# ── 触控与输入 ──
-# 设备有两套触控方案：
-#   1. Novatek NT36532 (SPI, IRQ 674) — 主触控面板
-#   2. HID multitouch (Xiaomi Touch, 15D9:00A1) — 虚拟 HID 触控
-# 同时有 HID 键盘/鼠标/触控板 (Xiaomi Keyboard/Mouse/Touch/Consumer)
-CONFIG_TOUCHSCREEN_FTS=m
-CONFIG_INPUT_TOUCHSCREEN=y
-CONFIG_SPI=y
-CONFIG_HID_MULTITOUCH=y
-CONFIG_I2C_HID=y
-CONFIG_INPUT_EVDEV=y
-CONFIG_INPUT_UINPUT=y
-
-# ── 背光 — KTZ8866 ──
-CONFIG_BACKLIGHT_CLASS_DEVICE=y
-CONFIG_BACKLIGHT_KTZ8866=m
-
-# ── USB 功能补充 ──
-CONFIG_USB_CONFIGFS_NCM=y
-CONFIG_USB_ROLE_SWITCH=y
-CONFIG_USB_DWC3=y
-CONFIG_PHY_QCOM_QMP_USB=y
-
-# ── 电源与充电 ──
-CONFIG_REGULATOR_QCOM_RPMH=y
-CONFIG_THERMAL_QCOM_SPMI_ADC_TM5=y
-
-# ── NVMEM（eFuse/QFPROM 访问） ──
-CONFIG_NVMEM=y
-CONFIG_NVMEM_SYSFS=y
-
-# ── F2FS 文件系统（设备 userdata 支持 F2FS） ──
+# ── 文件系统 ──
+CONFIG_EXT4_FS=y
 CONFIG_F2FS_FS=y
-CONFIG_F2FS_FS_POSIX_ACL=y
-CONFIG_F2FS_FS_SECURITY=y
-CONFIG_F2FS_FS_XATTR=y
-CONFIG_F2FS_FS_COMPRESSION=y
-CONFIG_F2FS_FS_LZ4=y
-CONFIG_F2FS_FS_LZ4HC=y
-CONFIG_F2FS_FS_LZO=y
-CONFIG_F2FS_FS_LZORLE=y
-CONFIG_F2FS_FS_ZSTD=y
-CONFIG_F2FS_STAT_FS=y
-CONFIG_F2FS_IOSTAT=y
 
-# ── 调试与启动参数 ──
-CONFIG_EARLYCON=y
-CONFIG_CMDLINE_EXTEND=y
-CONFIG_PRINTK=y
-CONFIG_PRINTK_TIME=y
+# ── 启动参数 ──
 CONFIG_ARM64_APPENDED_DTB=y
-
-# ── GPIO / Pinctrl ──
-CONFIG_PINCTRL_SM8750=y
-CONFIG_GPIO_SM8750_TLMM=y
-
-# ── I2C / SPI 总线 ──
-CONFIG_I2C_QCOM_GENI=y
-CONFIG_SPI_QCOM_GENI=y
