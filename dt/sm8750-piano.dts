@@ -43,11 +43,7 @@
 	};
 
 	chosen {
-		/*
-		 * WARNING: root=/dev/block/by-name/userdata 会擦除安卓数据！
-		 * 调试阶段建议先用 init=/bin/sh 避免挂载根文件系统。
-		 */
-		bootargs = "console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 init=/bin/sh loglevel=7";
+		/* bootargs 由 build.sh CMDLINE 统一管理，此处不重复定义 */
 		stdout-path = "serial0:115200n8";
 	};
 
