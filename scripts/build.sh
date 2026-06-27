@@ -26,7 +26,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # 全局启动参数：与设备树、deviceinfo 保持一致
-CMDLINE="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7"
+CMDLINE="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 init=/bin/sh loglevel=7"
 
 # ─── 固件提取与准备 ────────────────────────────────────────
 extract_firmware() {

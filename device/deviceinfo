@@ -22,7 +22,7 @@ deviceinfo_kernel_defconfig="sm8750_defconfig"
 deviceinfo_kernel_dtb_vendor="qcom"
 deviceinfo_kernel_dtb_name="sm8750-piano"
 deviceinfo_kernel_dtb_override=""
-deviceinfo_kernel_cmdline="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/system_b rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7"
+deviceinfo_kernel_cmdline="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7"
 # 注意：实际 boot.img 的 cmdline 由 scripts/build.sh CMDLINE 变量控制
 
 # ── Partition layout ──────────────────────────────
