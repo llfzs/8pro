@@ -9,12 +9,12 @@
  *   SoC:       SM8750-AB (Snapdragon 8 Elite)
  *   Display:   11.2" 3200x2136 dual-DSI DSC LCD (BOE, panel: xiaomi p81 35 02 0b)
  *   GPU:       Adreno 830 (a680)
- *   WiFi:      WCN7850 (ath12k, PCIe RC0 @ 0x1c00000, CNSS @ 0xb0000000)
- *   BT:        WCN7850 (btqca, UART14 @ 0xa9c000 — shared with debug console)
- *   Touch:     Novatek NT36532 (SPI1 @ 0xa88000, IRQ GPIO 674, lcd_id GPIO 612)
+ *   WiFi:      WCN7850 (ath12k, PCIe RC0 @ 0x1c00000)
+ *   BT:        WCN7850 (btqca, UART 待确认)
+ *   Touch:     Novatek NT36532 (SPI1 @ 0xa88000, IRQ GPIO 674)
  *   Storage:   UFS @ 0x1d84000
- *   Backlight: ktz8866 x2 (I2C bus 1 @ 0x98c000 addr 0x11, I2C bus 2 @ 0x880000 addr 0x11)
- *   Audio:     fs19xx smartpa x4 (I2C bus 0 @ 0x980000, addr 0x34-0x37)
+ *   Backlight: ktz8866 x2 (I2C bus 1/2)
+ *   Audio:     fs19xx smartpa x4 (I2C bus 0) — 无主线驱动
  *   Debug:     ttyMSM0 @ 0xa9c000 (UART14)
  */
 
@@ -23,7 +23,6 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
-#include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8750.dtsi"
 #include "pm8010.dtsi"
@@ -46,11 +45,18 @@
 	};
 
 	chosen {
+		/*
+		 * WARNING: root=/dev/block/by-name/userdata 会直接使用 userdata 分区，
+		 * 刷入后将完全擦除安卓用户数据！
+		 */
 		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
 		stdout-path = "serial0:115200n8";
 	};
 
-	/* ── 时钟 ──────────────────────────────────────────── */
+	/* ── 时钟 ────────────────────────────────────────────
+	 * sm8750.dtsi 引用但未定义 xo_board / sleep_clk，
+	 * 板级 DTS 必须提供。
+	 */
 
 	xo_board: xo-board {
 		compatible = "fixed-clock";
@@ -61,7 +67,8 @@
 	sleep_clk: sleep-clk {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
-		clock-frequency = <32000>;
+		/* 高通平台标准睡眠时钟 32.768kHz */
+		clock-frequency = <32768>;
 	};
 
 	clocks {
@@ -93,7 +100,11 @@
 		regulator-boot-on;
 	};
 
-	/* ── WCN7850 PMU（WiFi/BT 电源管理）────────────────── */
+	/* ── WCN7850 PMU ─────────────────────────────────────
+	 * NOTE: compatible "qcom,wcn7850-pmu" 无主线驱动。
+	 * 主线 ath12k 驱动自行管理电源，此节点仅作参考占位。
+	 * 若编译报错可安全删除。
+	 */
 
 	wcn7850-pmu {
 		compatible = "qcom,wcn7850-pmu";
@@ -191,7 +202,11 @@
 		};
 	};
 
-	/* ── 早期简单帧缓冲 ────────────────────────────────── */
+	/* ── 简单帧缓冲 ──────────────────────────────────────
+	 * 地址必须与 ABL/XBL 加载的帧缓冲地址完全一致。
+	 * 3200x2136 ARGB8888 单帧约 26MB，43MB 空间足够。
+	 * 需确认 bootloader 是否预留了 0xfc800000 这段内存。
+	 */
 
 	framebuffer0: framebuffer@fc800000 {
 		compatible = "simple-framebuffer";
@@ -205,7 +220,13 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  RPMH 稳压器（从 MTP 借用，Pad 8 Pro 使用相同 PMIC 配置）
+ *  RPMH 稳压器
+ *
+ *  WARNING: 以下配置照搬自 sm8750-mtp.dts，小米平板 8 Pro 的
+ *  PMIC 组合可能与 MTP 不完全一致。需对照原理图验证：
+ *  - pm8550vs (pmic-id "j") 是否存在
+ *  - 各路稳压器电压/电流是否匹配
+ *  - vreg_s3g_1p8 初始模式 LPM 是否合适（建议改为 HPM）
  * ═══════════════════════════════════════════════════════════ */
 
 &apps_rsc {
@@ -510,7 +531,8 @@
 			regulator-name = "vreg_s3g_1p8";
 			regulator-min-microvolt = <1856000>;
 			regulator-max-microvolt = <2000000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_LPM>;
+			/* WARNING: MTP 默认 LPM，多外设供电建议改为 HPM */
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
 						   RPMH_REGULATOR_MODE_HPM>;
@@ -603,6 +625,10 @@
 	};
 
 	regulators-5 {
+		/*
+		 * WARNING: pm8550vs 需确认平板是否搭载。
+		 * 若不存在，删除此节点及引用 vreg_s2j/vreg_s3j/vreg_l1j/vreg_l2j 的节点。
+		 */
 		compatible = "qcom,pm8550vs-rpmh-regulators";
 
 		vdd-l1-supply = <&vreg_s1d_0p97>;
@@ -768,6 +794,7 @@
 
 /* ═══════════════════════════════════════════════════════════
  *  调试串口 — ttyMSM0 @ 0xa9c000 (UART14, GPIO 42/43)
+ *  WARNING: function 名称需确认 QUP SE 编号，错误会导致无输出
  * ═══════════════════════════════════════════════════════════ */
 
 &uart14 {
@@ -778,8 +805,6 @@
 
 /* ═══════════════════════════════════════════════════════════
  *  背光 — KTZ8866 x2
- *
- *  dmesg: ktz8866 1-0011 / ktz8866 2-0011
  * ═══════════════════════════════════════════════════════════ */
 
 &i2c1 {
@@ -810,8 +835,8 @@
 
 /* ═══════════════════════════════════════════════════════════
  *  音频 — FS19xx SmartPA x4
- *
- *  dmesg: fs16xx 0-0034/0-0035/0-0036/0-0037
+ *  NOTE: "foursemi,fs19xx" 仅存在于高通安卓下游内核，主线无驱动。
+ *  编译可通过但设备不会被探测。
  * ═══════════════════════════════════════════════════════════ */
 
 &i2c0 {
@@ -821,27 +846,31 @@
 	fs19xx_0: smartpa@34 {
 		compatible = "foursemi,fs19xx";
 		reg = <0x34>;
-		status = "okay";
+		status = "disabled";
 	};
 	fs19xx_1: smartpa@35 {
 		compatible = "foursemi,fs19xx";
 		reg = <0x35>;
-		status = "okay";
+		status = "disabled";
 	};
 	fs19xx_2: smartpa@36 {
 		compatible = "foursemi,fs19xx";
 		reg = <0x36>;
-		status = "okay";
+		status = "disabled";
 	};
 	fs19xx_3: smartpa@37 {
 		compatible = "foursemi,fs19xx";
 		reg = <0x37>;
-		status = "okay";
+		status = "disabled";
 	};
 };
 
 /* ═══════════════════════════════════════════════════════════
  *  触摸屏 — Novatek NT36532 (SPI1 @ 0xa88000)
+ *
+ *  NOTE: 主线 novatek-nvt-ts 驱动仅支持 nt11205/nt36672a，
+ *  不支持 nt36532。compatible "novatek,NVT-ts" 为下游私有。
+ *  若要主线支持需移植或编写新驱动。
  * ═══════════════════════════════════════════════════════════ */
 
 &spi1 {
@@ -871,12 +900,14 @@
 
 		novatek,reset-delay-ms = <10>;
 		novatek,pen-support = <1>;
+		/* 下游私有属性，主线驱动不解析 */
 		novatek,lcd-id-gpio = <&tlmm 612 GPIO_ACTIVE_HIGH>;
 	};
 };
 
 /* ═══════════════════════════════════════════════════════════
  *  传感器 — IMU + 磁力计 (I2C bus 12)
+ *  NOTE: status=disabled，待验证后启用
  * ═══════════════════════════════════════════════════════════ */
 
 &i2c12 {
@@ -888,23 +919,25 @@
 		reg = <0x68>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <80 IRQ_TYPE_LEVEL_HIGH>;
+		status = "disabled";
 	};
 
 	magn@0c {
 		compatible = "st,lis2mdl";
 		reg = <0x0c>;
+		status = "disabled";
 	};
 };
 
 /* ═══════════════════════════════════════════════════════════
- *  蓝牙 — WCN7850 (UART14, btqca)
- *  注意: 平板可能复用 UART14 同时做 debug + BT，
- *  或使用其他 UART。需硬件验证后调整。
+ *  蓝牙 — WCN7850
+ *
+ *  WARNING: 调试串口 (UART14) 和蓝牙不能共用同一路 UART。
+ *  需确认平板实际 BT 使用的 UART 编号（查 dmesg 中 btqca 注册的 tty）。
+ *  以下为 BT UART 模板，确认后取消注释并修改标签。
  * ═══════════════════════════════════════════════════════════ */
 
-/* BT 节点暂不启用 — UART14 当前用于调试串口。
- * 若 BT 使用独立 UART，取消注释并修改标签：
- *
+/*
  * &uart3 {
  *     status = "okay";
  *     pinctrl-names = "default";
@@ -945,6 +978,9 @@
 
 /* ═══════════════════════════════════════════════════════════
  *  PCIe WiFi — WCN7850 (PCIe RC0 @ 0x1c00000)
+ *
+ *  PCIe 设备通过 Vendor/Device ID 自动枚举，ath12k 驱动直接
+ *  通过 PCIe ID 探测，无需在 DTS 中写 WiFi 子节点。
  * ═══════════════════════════════════════════════════════════ */
 
 &pcie0 {
@@ -959,28 +995,13 @@
 	status = "okay";
 };
 
-&pcieport0 {
-	wake-gpios = <&tlmm 104 GPIO_ACTIVE_HIGH>;
-	reset-gpios = <&tlmm 102 GPIO_ACTIVE_LOW>;
-
-	wifi@0 {
-		compatible = "pci17cb,1107";
-		reg = <0x10000 0x0 0x0 0x0 0x0>;
-
-		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
-		vddaon-supply = <&vreg_pmu_aon_0p59>;
-		vddwlcx-supply = <&vreg_pmu_wlcx_0p8>;
-		vddwlmx-supply = <&vreg_pmu_wlmx_0p85>;
-		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
-		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
-		vddrfa1p8-supply = <&vreg_pmu_rfa_1p8>;
-		vddpcie0p9-supply = <&vreg_pmu_pcie_0p9>;
-		vddpcie1p8-supply = <&vreg_pmu_pcie_1p8>;
-	};
-};
-
 /* ═══════════════════════════════════════════════════════════
- *  USB — DWC3 + PMIC glink (USB-C)
+ *  USB — DWC3
+ *
+ *  NOTE: pmic-glink 节点及 usb_dp_qmpphy_out / pmic_glink_ss_in /
+ *  pmic_glink_hs_in 端点引用需在 sm8750.dtsi 中有对应定义。
+ *  若编译报 undefined label，需在板级 DTS 中补充 pmic-glink 节点
+ *  或删除端点引用。
  * ═══════════════════════════════════════════════════════════ */
 
 &usb {
@@ -991,14 +1012,6 @@
 	vdda-phy-supply = <&vreg_l3g_1p2>;
 	vdda-pll-supply = <&vreg_l2d_0p88>;
 	status = "okay";
-};
-
-&usb_dp_qmpphy_out {
-	remote-endpoint = <&pmic_glink_ss_in>;
-};
-
-&usb_dwc3_hs {
-	remote-endpoint = <&pmic_glink_hs_in>;
 };
 
 &usb_hsphy {
@@ -1059,19 +1072,8 @@
 /* ═══════════════════════════════════════════════════════════
  *  Pinmux
  *
- *  GPIO 42/43: debug UART
- *  GPIO 45:   panel VDDIO enable
- *  GPIO 46:   panel reset
- *  GPIO 99:   WLAN enable
- *  GPIO 100:  PCIe PERST (待验证)
- *  GPIO 102:  PCIe reset
- *  GPIO 104:  PCIe wake
- *  GPIO 18:   BT enable
- *  GPIO 215:  UFS reset
- *  GPIO 674:  touch IRQ
- *  GPIO 612:  touch lcd_id (BOE)
- *  GPIO 700:  touch reset
- *  GPIO 607:  touch status
+ *  GPIO 编号来自 dmesg，function 名称需对照 SM8750 TRM 验证。
+ *  gpio-reserved-ranges 需确认和平板实际保留一致。
  * ═══════════════════════════════════════════════════════════ */
 
 &tlmm {
@@ -1092,14 +1094,15 @@
 	};
 
 	ts_spi_default: ts-spi-default {
+		/* 中断脚上拉，复位脚下拉，状态脚无上拉 */
 		pins = "gpio674", "gpio700", "gpio607";
 		function = "gpio";
 		drive-strength = <8>;
-		bias-pull-up;
 	};
 
 	uart14_default: uart14-default {
 		pins = "gpio42", "gpio43";
+		/* WARNING: function 名称需确认，qup_se5_uart 仅为推测 */
 		function = "qup_se5_uart";
 		drive-strength = <8>;
 		bias-disable;
