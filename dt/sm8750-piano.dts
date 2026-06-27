@@ -45,11 +45,7 @@
 	};
 
 	chosen {
-		/*
-		 * WARNING: root=/dev/block/by-name/userdata 会直接使用 userdata 分区，
-		 * 刷入后将完全擦除安卓用户数据！
-		 */
-		bootargs = "console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 root=/dev/block/by-name/userdata rootfstype=ext4 rw init=/sbin/init fbcon=nodefer loglevel=7";
+		/* bootargs 由 build.sh CMDLINE 统一管理，此处不重复定义 */
 		stdout-path = "serial0:115200n8";
 	};
 
