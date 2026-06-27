@@ -94,6 +94,22 @@ install_deps() {
         android-sdk-libsparse-utils \
         2>/dev/null
 
+    # 部署 avbtool 用于生成标准 vbmeta 镜像
+    if ! command -v avbtool >/dev/null 2>&1; then
+        log "部署 avbtool 工具..."
+        local TMP_AVB="/tmp/avbtool"
+        # 优先尝试官方源，失败则使用 GitHub 镜像
+        if wget -q https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT -O "${TMP_AVB}.b64"; then
+            base64 -d "${TMP_AVB}.b64" > "$TMP_AVB"
+        else
+            warn "官方源不可达，使用 GitHub 镜像源..."
+            wget -q https://raw.githubusercontent.com/LineageOS/android_external_avb/lineage-21.0/avbtool -O "$TMP_AVB"
+        fi
+        chmod +x "$TMP_AVB"
+        ${SUDO_CMD} mv "$TMP_AVB" /usr/local/bin/avbtool
+        rm -f "${TMP_AVB}.b64"
+    fi
+
     # 安装 mkbootimg（如果尚未安装）
     if ! command -v mkbootimg >/dev/null 2>&1; then
         log "mkbootimg 未找到，尝试从 AOSP 安装..."
@@ -384,34 +400,25 @@ PYEOF
 # ─── 4. 生成 vbmeta.img（禁用 AVB 验证） ─────────────────
 build_vbmeta() {
     log "生成 vbmeta.img（禁用 dm-verity/AVB）..."
-    # 使用标准工具生成空的 vbmeta 并禁用验证
-    # 如果没有 avbtool，手动生成一个最小的 vbmeta header
-    python3 - "$OUT/vbmeta.img" <<'PYEOF'
-import struct, sys
 
-output = sys.argv[1]
+    # 前置检查 avbtool 是否可用
+    if ! command -v avbtool >/dev/null 2>&1; then
+        err "avbtool 未找到，请先执行 './scripts/build.sh deps' 安装依赖"
+    fi
 
-# Minimal vbmeta image with verification disabled
-# Header: AVB magic + version + auth/aux/vbmeta sizes = 0 (no actual chain)
-vbmeta = bytearray(256)
+    # 使用标准 AVB 工具生成禁用校验的 vbmeta 镜像
+    # --flags 3 = 同时禁用 AVB 签名验证 + dm-verity 校验
+    # --padding_size 4096 匹配高通平台分区对齐要求
+    avbtool make_vbmeta_image \
+        --output "$OUT/vbmeta.img" \
+        --flags 3 \
+        --padding_size 4096
 
-# Magic: "AVB0"
-vbmeta[0:4] = b'AVB0'
-# Required_libs (offset 4, 48 bytes) - empty
-# Header version major (offset 56)
-struct.pack_into('>Q', vbmeta, 56, 1)
-# Header version minor (offset 64)
-struct.pack_into('>Q', vbmeta, 64, 0)
-# Authentication data block size (offset 104)
-struct.pack_into('>Q', vbmeta, 104, 0)
-# Auxiliary data block size (offset 112)
-struct.pack_into('>Q', vbmeta, 112, 0)
-
-with open(output, 'wb') as f:
-    f.write(vbmeta)
-
-print(f"vbmeta.img 生成成功 -> {output} (AVB 已禁用)")
-PYEOF
+    if [ $? -eq 0 ]; then
+        log "vbmeta.img 生成成功: $OUT/vbmeta.img"
+    else
+        err "vbmeta.img 生成失败，请检查 avbtool 是否正常工作"
+    fi
 }
 
 # ─── 5. 构建 rootfs.img ───────────────────────────────────
@@ -583,11 +590,21 @@ case "${1:-all}" in
         echo "  vbmeta.img  $(du -h "$OUT/vbmeta.img" | cut -f1)"
         echo "  rootfs.img  $(du -h "$OUT/rootfs.img" | cut -f1)"
         echo ""
-        echo "刷入命令："
+        echo "刷入命令（全槽位默认方案）："
         echo "  adb reboot bootloader"
-        echo "  fastboot flash vbmeta --disable-verity --disable-verification $OUT/vbmeta.img"
+        echo "  fastboot flash vbmeta $OUT/vbmeta.img"
         echo "  fastboot flash boot $OUT/boot.img"
         echo "  fastboot flash userdata $OUT/rootfs.img"
+        echo "  fastboot reboot"
+        echo ""
+        echo "刷入命令（仅 B 槽，保留 A 槽原生安卓）："
+        echo "  adb reboot bootloader"
+        echo "  fastboot flash vbmeta_b $OUT/vbmeta.img"
+        echo "  fastboot flash boot_b $OUT/boot.img"
+        echo "  fastboot flash userdata $OUT/rootfs.img"
+        echo "  fastboot set_active b && fastboot reboot"
+        echo ""
+        echo "切回原生安卓："
         echo "  fastboot set_active a && fastboot reboot"
         ;;
     clean)    rm -rf "$BUILD"; log "已清理构建目录" ;;
