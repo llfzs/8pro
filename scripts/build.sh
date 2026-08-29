@@ -161,9 +161,10 @@ build_kernel() {
 
     # 规范合入设备专属配置（自动处理依赖与冲突）
     log "合入设备专属内核配置..."
-    scripts/kconfig/merge_config.sh -O "$BUILD/kout" \
-        "$BUILD/kout/.config" \
-        "$DIR/device/kernel.config.fragment"
+    local CONFIGS=("$BUILD/kout/.config")
+    [ -f "$DIR/device/sm8750.config" ] && CONFIGS+=("$DIR/device/sm8750.config")
+    [ -f "$DIR/device/kernel.config.fragment" ] && CONFIGS+=("$DIR/device/kernel.config.fragment")
+    scripts/kconfig/merge_config.sh -O "$BUILD/kout" "${CONFIGS[@]}"
 
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig O="$BUILD/kout"
 

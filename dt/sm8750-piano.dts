@@ -5,17 +5,25 @@
  * Based on dmesg from actual device (2026-06-26).
  * SoC-level references borrowed from sm8750-mtp.dts where applicable.
  *
- * Hardware summary (verified from dmesg):
+ * Hardware summary (verified from dmesg + OFRP device tree):
  *   SoC:       SM8750-AB (Snapdragon 8 Elite)
- *   Display:   11.2" 3200x2136 dual-DSI DSC LCD (BOE, panel: xiaomi p81 35 02 0b)
+ *   Display:   11.2" 3200x2136 dual-DSI DSC LCD (BOE + CSOT 双面板)
+ *              panel: xiaomi p81 35 02 0b (dmesg)
+ *              backlight: /sys/class/backlight/panel0-backlight, max=2047
  *   GPU:       Adreno 830 (a680, 固件: gen80600_gmu.bin)
  *   WiFi:      WCN7850 (ath12k, PCIe RC0 @ 0x1c00000)
+ *              固件: peach_v2 平台, cnss2 驱动
  *   BT:        WCN7850 (btqca, UART 待确认)
  *   Touch:     Novatek NT36532 (SPI1 @ 0xa88000, IRQ GPIO 674)
- *   Storage:   UFS @ 0x1d84000
+ *              固件: novatek_nt36532_piano_fw_boe.bin / _csot.bin (OFRP)
+ *              模块: nt36532_touch.ko (OFRP TW_LOAD_VENDOR_MODULES 确认)
+ *   Haptics:   Cirrus Logic CS40L26 (I2C, cs40l26-i2c.ko + qcom-hv-haptics.ko)
+ *   NFC:       NXP + STM (nxp-nci.ko, stm_st54se_gpio.ko, stm_nfc_i2c.ko)
+ *   Storage:   UFS @ 0x1d84000 (KIOXIA)
  *   Backlight: ktz8866 x2 (I2C bus 1/2)
  *   Audio:     fs19xx smartpa x4 (I2C bus 0) — 无主线驱动
  *   Debug:     ttyMSM0 @ 0xa9c000 (UART14)
+ *   USB:       DWC3 @ a600000.ssusb (USB 3.2 Gen 1)
  */
 
 /dts-v1/;
@@ -185,7 +193,7 @@
 
 	gpio-keys {
 		compatible = "gpio-keys";
-		pinctrl-0 = <&volume_up_n>;
+		pinctrl-0 = <&volume_up_n>, <&volume_down_n>;
 		pinctrl-names = "default";
 
 		key-volume-up {
@@ -195,6 +203,51 @@
 			debounce-interval = <15>;
 			linux,can-disable;
 			wakeup-source;
+		};
+
+		key-volume-down {
+			label = "Volume Down";
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpios = <&pm8550_gpios 7 GPIO_ACTIVE_LOW>;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+	};
+
+	/* ── USB-C PMIC GLINK ─────────────────────────────────
+	 * OFRP recovery.fstab 确认 USB 控制器: a600000.ssusb DWC3
+	 * pmic-glink 提供 USB-C 连接器管理与 orientation 检测
+	 */
+	pmic-glink {
+		compatible = "qcom,sm8750-pmic-glink",
+			     "qcom,sm8550-pmic-glink",
+			     "qcom,pmic-glink";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		orientation-gpios = <&tlmm 61 GPIO_ACTIVE_HIGH>;
+
+		connector@0 {
+			compatible = "usb-c-connector";
+			reg = <0>;
+			power-role = "dual";
+			data-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					pmic_glink_hs_in: endpoint {
+						remote-endpoint = <&usb_1_dwc3_hs>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					pmic_glink_ss_in: endpoint {
+						remote-endpoint = <&usb_dp_qmpphy_out>;
+					};
+				};
+			};
 		};
 	};
 
@@ -926,6 +979,60 @@
 };
 
 /* ═══════════════════════════════════════════════════════════
+ *  NFC — NXP PN557 / STM ST54
+ *
+ *  OFRP TW_LOAD_VENDOR_MODULES 确认: nxp-nci.ko, stm_st54se_gpio.ko,
+ *  stm_nfc_i2c.ko。典型 I2C 地址 0x28，需确认总线编号。
+ *  status=disabled，确认后启用。
+ * ═══════════════════════════════════════════════════════════ */
+
+/* TODO: 确认 NFC 使用的 I2C 总线编号，取消注释并启用 */
+/* &i2c_N {
+ *	status = "okay";
+ *	clock-frequency = <400000>;
+ *
+ *	nfc@28 {
+ *		compatible = "nxp,pn557";
+ *		reg = <0x28>;
+ *
+ *		interrupt-parent = <&tlmm>;
+ *		interrupts = <TODO IRQ_TYPE_LEVEL_HIGH>;
+ *
+ *		enable-gpios = <&tlmm TODO GPIO_ACTIVE_HIGH>;
+ *		firmware-gpios = <&tlmm TODO GPIO_ACTIVE_HIGH>;
+ *
+ *		status = "disabled";
+ *	};
+ *};
+ */
+
+/* ═══════════════════════════════════════════════════════════
+ *  震动马达 — Cirrus Logic CS40L26
+ *
+ *  OFRP TW_LOAD_VENDOR_MODULES 确认: cs40l26-i2c.ko + qcom-hv-haptics.ko
+ *  典型 I2C 地址 0x2C，需确认总线编号。
+ *  固件文件: cs40l26.bin, cs40l26.wmfw, cs40l26-calib.bin 等
+ *  (OFRP prebuilt/lib/firmware/ 目录)
+ * ═══════════════════════════════════════════════════════════ */
+
+/* TODO: 确认 CS40L26 使用的 I2C 总线编号，取消注释并启用 */
+/* &i2c_N {
+ *	status = "okay";
+ *	clock-frequency = <400000>;
+ *
+ *	haptics@2c {
+ *		compatible = "cirrus,cs40l26";
+ *		reg = <0x2c>;
+ *
+ *		reset-gpios = <&tlmm TODO GPIO_ACTIVE_LOW>;
+ *		irq-gpios = <&tlmm TODO GPIO_ACTIVE_HIGH>;
+ *
+ *		status = "disabled";
+ *	};
+ *};
+ */
+
+/* ═══════════════════════════════════════════════════════════
  *  蓝牙 — WCN7850
  *
  *  WARNING: 调试串口 (UART14) 和蓝牙不能共用同一路 UART。
@@ -1042,6 +1149,14 @@
 &pm8550_gpios {
 	volume_up_n: volume-up-n-state {
 		pins = "gpio6";
+		function = "normal";
+		bias-pull-up;
+		input-enable;
+		power-source = <1>;
+	};
+
+	volume_down_n: volume-down-n-state {
+		pins = "gpio7";
 		function = "normal";
 		bias-pull-up;
 		input-enable;
