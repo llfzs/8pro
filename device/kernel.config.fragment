@@ -12,27 +12,30 @@ CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 CONFIG_FONT_8x16=y
 
-# ── DRM 显示与 fbdev 模拟（原生面板驱动加载后接管） ──
+# ── DRM 显示与 fbdev 模拟（最小可用配置，保持同一内核树的一致性） ──
 CONFIG_DRM=y
 CONFIG_DRM_MSM=y
 CONFIG_DRM_MSM_DSI=y
-CONFIG_DRM_MSM_GPU=y
+CONFIG_DRM_MSM_DSI_10NM_PHY=y
+CONFIG_DRM_MSM_DP=y
+CONFIG_DRM_MSM_SDE=y
+CONFIG_DRM_MSM_DSC=y
 CONFIG_DRM_FBDEV_EMULATION=y
 CONFIG_DRM_DISPLAY_HELPER=y
+CONFIG_DRM_KMS_HELPER=y
+CONFIG_DRM_ATOMIC_HELPER=y
 CONFIG_DRM_BRIDGE=y
 CONFIG_DRM_PANEL=y
+CONFIG_DRM_PANEL_SIMPLE=y
+CONFIG_DRM_PANEL_ORIENTATION_QUIRKS=y
+CONFIG_DRM_DP_MST=y
 
-# ── DSI 面板驱动 ──
-# 小米 Pad 8 Pro 使用双 DSI 面板，需要对应的面板驱动。
-# 若主线内核无现成驱动，需自行编写 panel-xiaomi-p81.c。
-# 以下为通用 DSI 面板支持：
-CONFIG_DRM_MSM_DSI_HELPER=y
+# ── DSI / 面板驱动 ──
+# 小米 Pad 8 Pro 使用 NT37801 AMOLED。保持只保留与显示链路直接相关的 panel/drm 选项。
+CONFIG_DRM_PANEL_NOVATEK_NT37801=y
 
 # ── GPU — Adreno 830 (a680) ──
-# DRM_MSM_GPU 已在上方启用。
-# Adreno a680 需要 ZAP shader 固件 (a680_zap.mbn)。
-# 固件路径: /lib/firmware/qcom/a680_zap.mbn
-CONFIG_DRM_MSM_GPU_STATE=y
+# 让 qcom_defconfig 自己处理最小化 GPU 相关依赖，避免重复/冲突的 DRM_MSM_GPU 开关。
 
 # ── 存储：UFS ──
 # 设备使用 phy_qcom_ufs_qmp_v4_sun，qcom_defconfig 应已包含基础 UFS 支持
