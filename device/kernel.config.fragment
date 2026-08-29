@@ -12,27 +12,8 @@ CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 CONFIG_FONT_8x16=y
 
-# ── DRM 显示与 fbdev 模拟（最小可用配置，保持同一内核树的一致性） ──
-CONFIG_DRM=y
-CONFIG_DRM_MSM=y
-CONFIG_DRM_MSM_DSI=y
-CONFIG_DRM_MSM_DSI_10NM_PHY=y
-CONFIG_DRM_MSM_DP=y
-CONFIG_DRM_MSM_SDE=y
-CONFIG_DRM_MSM_DSC=y
-CONFIG_DRM_FBDEV_EMULATION=y
-CONFIG_DRM_DISPLAY_HELPER=y
-CONFIG_DRM_KMS_HELPER=y
-CONFIG_DRM_ATOMIC_HELPER=y
-CONFIG_DRM_BRIDGE=y
-CONFIG_DRM_PANEL=y
-CONFIG_DRM_PANEL_SIMPLE=y
-CONFIG_DRM_PANEL_ORIENTATION_QUIRKS=y
-CONFIG_DRM_DP_MST=y
-
-# ── DSI / 面板驱动 ──
-# 小米 Pad 8 Pro 使用 NT37801 AMOLED。保持只保留与显示链路直接相关的 panel/drm 选项。
-CONFIG_DRM_PANEL_NOVATEK_NT37801=y
+# ── DRM 显示配置已集中到 sm8750.config，避免重复配置与冲突 ──
+# 这里保留非显示的设备补丁项；DRM/KMS/Panel 选项只在 sm8750.config 中维护。
 
 # ── GPU — Adreno 830 (a680) ──
 # 让 qcom_defconfig 自己处理最小化 GPU 相关依赖，避免重复/冲突的 DRM_MSM_GPU 开关。

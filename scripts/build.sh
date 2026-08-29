@@ -153,8 +153,9 @@ build_kernel() {
 
     cd "$KSRC"
 
-    # 加载基础配置
+    # 加载基础配置，并先清理旧状态，避免残留 .config / stale Kconfig 继续引用旧的 DRM 链接配置
     log "加载内核基础配置..."
+    make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- mrproper O="$BUILD/kout" 2>/dev/null || true
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- defconfig O="$BUILD/kout" 2>/dev/null || \
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- qcom_defconfig O="$BUILD/kout" 2>/dev/null || \
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- msm_defconfig O="$BUILD/kout"
