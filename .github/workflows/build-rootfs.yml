@@ -32,6 +32,18 @@ jobs:
           path: cache/busybox-aarch64
           key: busybox-aarch64-musl-1.35.0
 
+      # ========== 新增：RootFS 构建依赖缓存 ==========
+      - name: Cache rootfs build dependencies
+        uses: actions/cache@v4
+        with:
+          # 若 build.sh deps 的实际输出目录不同，修改此处路径即可
+          path: cache/rootfs-deps
+          # 以 build.sh 文件哈希作为缓存键，脚本改动自动失效缓存
+          key: rootfs-deps-aarch64-${{ hashFiles('scripts/build.sh') }}
+          restore-keys: |
+            rootfs-deps-aarch64-
+      # ==============================================
+
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
@@ -138,6 +150,8 @@ jobs:
       - name: Build boot.img + vbmeta.img + rootfs.img
         run: |
           chmod +x scripts/build.sh
+          # 新增：初始化 rootfs 基础依赖（基础根文件系统、架构专属工具等）
+          ./scripts/build.sh deps
           ./scripts/build.sh boot
           ./scripts/build.sh vbmeta
           ./scripts/build.sh rootfs

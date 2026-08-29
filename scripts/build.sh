@@ -26,10 +26,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # 全局启动参数：与设备树、deviceinfo 保持一致
-# CMDLINE 与 DTS chosen/bootargs 保持一致
-# minimal-boot 阶段: init=/bin/sh（不挂载根文件系统，仅串口调试）
-# 完整测试阶段: 改为 root=/dev/block/by-name/system_b rootfstype=ext4 rw init=/sbin/init
-CMDLINE="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 init=/bin/sh loglevel=7"
+CMDLINE="console=tty0 console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa9c000 loglevel=7"
 
 # ─── 固件提取与准备 ────────────────────────────────────────
 extract_firmware() {
@@ -97,6 +94,22 @@ install_deps() {
         android-sdk-libsparse-utils \
         2>/dev/null
 
+    # 部署 avbtool 用于生成标准 vbmeta 镜像
+    if ! command -v avbtool >/dev/null 2>&1; then
+        log "部署 avbtool 工具..."
+        local TMP_AVB="/tmp/avbtool"
+        # 优先尝试官方源，失败则使用 GitHub 镜像
+        if wget -q https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT -O "${TMP_AVB}.b64"; then
+            base64 -d "${TMP_AVB}.b64" > "$TMP_AVB"
+        else
+            warn "官方源不可达，使用 GitHub 镜像源..."
+            wget -q https://raw.githubusercontent.com/LineageOS/android_external_avb/lineage-21.0/avbtool -O "$TMP_AVB"
+        fi
+        chmod +x "$TMP_AVB"
+        ${SUDO_CMD} mv "$TMP_AVB" /usr/local/bin/avbtool
+        rm -f "${TMP_AVB}.b64"
+    fi
+
     # 安装 mkbootimg（如果尚未安装）
     if ! command -v mkbootimg >/dev/null 2>&1; then
         log "mkbootimg 未找到，尝试从 AOSP 安装..."
@@ -148,9 +161,10 @@ build_kernel() {
 
     # 规范合入设备专属配置（自动处理依赖与冲突）
     log "合入设备专属内核配置..."
-    scripts/kconfig/merge_config.sh -O "$BUILD/kout" \
-        "$BUILD/kout/.config" \
-        "$DIR/device/kernel.config.fragment"
+    local CONFIGS=("$BUILD/kout/.config")
+    [ -f "$DIR/device/sm8750.config" ] && CONFIGS+=("$DIR/device/sm8750.config")
+    [ -f "$DIR/device/kernel.config.fragment" ] && CONFIGS+=("$DIR/device/kernel.config.fragment")
+    scripts/kconfig/merge_config.sh -O "$BUILD/kout" "${CONFIGS[@]}"
 
     make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig O="$BUILD/kout"
 
@@ -201,36 +215,75 @@ build_boot() {
     # 初始化 initramfs 目录
     local INIT="$BUILD/initramfs-root"
     rm -rf "$INIT"
-    mkdir -p "$INIT"/{bin,dev,etc,lib,mnt/rootfs,proc,sys,run}
+    mkdir -p "$INIT"/{bin,dev,etc,lib,mnt/rootfs,proc,sys,run,tmp,var/log,sbin,usr/bin,usr/sbin}
 
-    # 下载 aarch64 架构静态 BusyBox（从官方源直接下载）
+    # ── BusyBox ──
     BUSYBOX_CACHE="$DIR/cache/busybox-aarch64"
     mkdir -p "$DIR/cache"
 
     if [ -f "$BUSYBOX_CACHE" ]; then
-        log "复用缓存内 BusyBox，跳过下载"
+        log "复用缓存内 BusyBox"
         cp "$BUSYBOX_CACHE" "$BUILD/"
     else
-        log "首次下载 BusyBox 并缓存（官方源）..."
+        log "下载 BusyBox (aarch64 static)..."
         wget --timeout=30 --tries=3 -q \
             "https://busybox.net/downloads/binaries/1.35.0-aarch64-linux-musl/busybox" \
-            -O "$BUSYBOX_CACHE" || err "BusyBox 下载失败，请手动从 https://busybox.net 下载并放置到 cache/busybox-aarch64"
+            -O "$BUSYBOX_CACHE" || err "BusyBox 下载失败"
         cp "$BUSYBOX_CACHE" "$BUILD/"
     fi
 
     cp "$BUILD/busybox-aarch64" "$INIT/bin/busybox"
     chmod +x "$INIT/bin/busybox"
 
-    # 创建常用命令软链接
-    for cmd in sh mount umount mkdir cat echo ls modprobe switch_root sleep seq test [ true false \
-               grep sed awk head tail wc ln cp mv rm date uname hostname poweroff reboot; do
-        ln -sf busybox "$INIT/bin/$cmd" 2>/dev/null || true
-    done
+    # 创建全量 applet 软链接
+    log "创建 BusyBox applet 软链接..."
+    cd "$INIT/bin"
+    # 基础命令
+    for cmd in sh ash bash mount umount mkdir rmdir cat echo ls pwd cd \
+               cp mv rm ln chmod chown chgrp mknod sync sleep usleep \
+               seq test [ true false yes no clear reset \
+               grep sed awk head tail wc sort uniq cut tr fold \
+               find xargs basename dirname realpath readlink \
+               date uname hostname id whoami env printenv set \
+               ps kill killall nice free df du stat \
+               tar gzip gunzip bzip2 bunzip2 xz unxz zcat \
+               dd md5sum sha256sum cksum \
+               vi less more strings hexdump od \
+               switch_root poweroff reboot halt; do
+        ln -sf busybox "$cmd" 2>/dev/null
+done
+    # 网络
+    for cmd in ifconfig ip route ping ping6 traceroute nslookup \
+               wget ftpget ftpput nc netstat ss \
+               udhcpc udhcpd host name \
+               telnet tftp; do
+        ln -sf busybox "$cmd" 2>/dev/null
+done
+    # 存储/文件系统
+    for cmd in fdisk blkid losetup mountpoint \
+               mkfs.ext4 mke2fs e2fsck fsck.ext4 tune2fs \
+               dmesg lsmod modprobe modinfo insmod rmmod depmod \
+               lspci lsusb lsblk blkid; do
+        ln -sf busybox "$cmd" 2>/dev/null
+done
+    # shell 工具
+    for cmd in expr printf read set shift trap type ulimit unset \
+               which command builtin exec eval exit return source . \
+               alias unalias export declare local readonly \
+               getopts getopt; do
+        ln -sf busybox "$cmd" 2>/dev/null
+done
+    # init/login
+    for cmd in init getty login su sudo passwd \
+               syslogd klogd; do
+        ln -sf busybox "$cmd" 2>/dev/null
+done
+    cd "$DIR"
 
-    # 拷入内核模块
+    # ── 拷入内核模块 ──
     [ -d "$BUILD/modules/lib/modules" ] && cp -a "$BUILD/modules/lib/modules" "$INIT/lib/"
 
-    # 拷入启动必需固件（UFS、显示、PCIe 相关）
+    # ── 拷入固件 ──
     if [ -d "$BUILD/firmware" ]; then
         mkdir -p "$INIT/lib/firmware"
         [ -d "$BUILD/firmware/wifi/ath12k" ] && cp -a "$BUILD/firmware/wifi/ath12k" "$INIT/lib/firmware/" 2>/dev/null || true
@@ -239,65 +292,187 @@ build_boot() {
         [ -d "$BUILD/firmware/tz" ]         && cp -a "$BUILD/firmware/tz"         "$INIT/lib/firmware/" 2>/dev/null || true
     fi
 
-    # 从 deviceinfo 提取需要在 initramfs 中加载的模块
-    # 包含：存储、显示、PCIe(WiFi)、USB、蓝牙HCI
-    local INIT_MODULES="phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy btqca hci_uart"
-
-    # init 启动脚本
-    cat > "$INIT/init" <<INITEOF
+    # ── 基础配置文件 ──
+    # /etc/passwd
+    cat > "$INIT/etc/passwd" <<'EOF'
+root::0:0:root:/root:/bin/sh
+EOF
+    # /etc/shadow
+    cat > "$INIT/etc/shadow" <<'EOF'
+root::::::::
+EOF
+    # /etc/group
+    cat > "$INIT/etc/group" <<'EOF'
+root:x:0:
+tty:x:5:
+video:x:28:
+input:x:104:
+uucp:x:108:
+EOF
+    # /etc/hostname
+    echo "piano" > "$INIT/etc/hostname"
+    # /etc/hosts
+    cat > "$INIT/etc/hosts" <<'EOF'
+127.0.0.1 localhost piano
+::1       localhost
+EOF
+    # /etc/inittab - 串口控制台自动登录
+    cat > "$INIT/etc/inittab" <<'EOF'
+::sysinit:/etc/init.d/rcS
+::respawn:-/bin/sh
+ttyMSM0::respawn:-/bin/sh
+EOF
+    # /etc/profile
+    cat > "$INIT/etc/profile" <<'PROFILE'
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export TERM=linux
+export PS1='\u@\h:\w\$ '
+alias ll='ls -la'
+PROFILE
+    # /etc/init.d/rcS - 启动脚本
+    mkdir -p "$INIT/etc/init.d"
+    cat > "$INIT/etc/init.d/rcS" <<'RCS'
 #!/bin/sh
-export PATH=/bin
+/etc/init.d/S01-mount.sh
+/etc/init.d/S10-modules.sh
+/etc/init.d/S20-network.sh
+/etc/init.d/S99-banner.sh
+RCS
+    chmod +x "$INIT/etc/init.d/rcS"
+
+    # S01 - 挂载文件系统
+    cat > "$INIT/etc/init.d/S01-mount.sh" <<'S01'
+#!/bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mount -t tmpfs tmpfs /run
+mount -t tmpfs tmpfs /tmp
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+S01
+    chmod +x "$INIT/etc/init.d/S01-mount.sh"
+
+    # S10 - 加载模块
+    cat > "$INIT/etc/init.d/S10-modules.sh" <<S10
+#!/bin/sh
+# 核心驱动
+for m in phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie \
+         msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy; do
+    modprobe "\\$m" 2>/dev/null
+done
+# USB 网络 (NCM/RNDIS)
+modprobe libcomposite 2>/dev/null
+modprobe usb_f_ncm 2>/dev/null
+# 等待 UFS
+for i in \\$(seq 1 50); do
+    [ -b /dev/block/by-name/userdata ] && break
+    sleep 0.2
+done
+echo "UFS ready: \\$(ls /dev/block/by-name/ 2>/dev/null | wc -l) partitions"
+S10
+    chmod +x "$INIT/etc/init.d/S10-modules.sh"
+
+    # S20 - 网络
+    cat > "$INIT/etc/init.d/S20-network.sh" <<'S20'
+#!/bin/sh
+# lo
+ifconfig lo 127.0.0.1 up 2>/dev/null
+# USB 网络 (如果 gadget 已配置)
+if [ -d /sys/class/net/usb0 ]; then
+    ifconfig usb0 172.16.42.1 netmask 255.255.255.0 up 2>/dev/null
+    echo "USB network: 172.16.42.1"
+fi
+S20
+    chmod +x "$INIT/etc/init.d/S20-network.sh"
+
+    # S99 - 启动 banner
+    cat > "$INIT/etc/init.d/S99-banner.sh" <<'S99'
+#!/bin/sh
+echo ""
+echo "======================================"
+echo " Xiaomi Pad 8 Pro - Minimal Linux"
+echo " Kernel: $(uname -r)"
+echo " $(uname -m) / $(cat /proc/cpuinfo | grep -c processor) CPUs"
+echo " RAM: $(free -m 2>/dev/null | grep Mem | awk '{print $2}')MB"
+echo "======================================"
+echo ""
+echo "Available block devices:"
+ls /dev/block/by-name/ 2>/dev/null | head -20 || echo "(none)"
+echo ""
+echo "Type 'sh' for shell, 'poweroff' to shutdown"
+S99
+    chmod +x "$INIT/etc/init.d/S99-banner.sh"
+
+    # ── init 脚本 ──
+    cat > "$INIT/init" <<'INITEOF'
+#!/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 
 # 挂载基础文件系统
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
 mount -t tmpfs tmpfs /run
+mount -t tmpfs tmpfs /tmp
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
 
-# 加载核心驱动模块
-for m in $INIT_MODULES; do
-    modprobe "\$m" 2>/dev/null
+# 加载核心驱动
+for m in phy_qcom_qmp_ufs ufs_qcom phy_qcom_qmp_pcie \
+         msm_drm dwc3 qcom_spmi_pmic qcom_qusb2_phy; do
+    modprobe "$m" 2>/dev/null
 done
 
-# 等待 UFS 存储与 by-name 链接就绪（最长 10 秒）
-for i in \$(seq 1 50); do
+# 等待 UFS 就绪
+for i in $(seq 1 50); do
     [ -b /dev/block/by-name/userdata ] && break
     sleep 0.2
 done
 
-# 检查目标分区是否存在
+# lo
+ifconfig lo 127.0.0.1 up 2>/dev/null
+
+# 尝试挂载 rootfs
 ROOT="/dev/block/by-name/userdata"
-if [ ! -b "\$ROOT" ]; then
-    echo "ERROR: 块设备 \$ROOT 不存在"
-    echo "可用块设备:"
-    ls -la /dev/block/by-name/ 2>/dev/null || ls /dev/block/ 2>/dev/null
-    echo "进入紧急 Shell 调试"
-    exec /bin/sh
+if [ -b "$ROOT" ]; then
+    mount -t ext4 -o rw "$ROOT" /mnt/rootfs 2>/dev/null
+    mount -t f2fs -o rw "$ROOT" /mnt/rootfs 2>/dev/null
+    if [ -x /mnt/rootfs/sbin/init ]; then
+        echo "Switching to rootfs..."
+        umount /proc /sys /dev /run /tmp 2>/dev/null
+        exec switch_root /mnt/rootfs /sbin/init
+    fi
 fi
 
-# 挂载根分区
-if ! mount -t ext4 -o rw "\$ROOT" /mnt/rootfs 2>/dev/null; then
-    echo "ERROR: 无法挂载 userdata 为根文件系统"
-    echo "尝试运行 fsck..."
-    e2fsck -y "\$ROOT" 2>/dev/null || true
-    mount -t ext4 -o rw "\$ROOT" /mnt/rootfs 2>/dev/null || {
-        echo "挂载失败，进入紧急 Shell"
-        exec /bin/sh
-    }
+# 无 rootfs，进入最小化 Linux shell
+echo ""
+echo "======================================"
+echo " Xiaomi Pad 8 Pro - Minimal Linux"
+echo " Kernel: $(uname -r)"
+echo " $(uname -m) / $(cat /proc/cpuinfo 2>/dev/null | grep -c processor) CPUs"
+RAM_KB=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
+echo " RAM: $(( ${RAM_KB:-0} / 1024 ))MB"
+echo "======================================"
+echo ""
+echo "Block devices:"
+ls /dev/block/by-name/ 2>/dev/null | head -20 || echo "(none)"
+echo ""
+if [ -d /sys/class/net/usb0 ]; then
+    ifconfig usb0 172.16.42.1 netmask 255.255.255.0 up 2>/dev/null
+    echo "USB network: 172.16.42.1"
 fi
+echo ""
 
-# 检查 switch_root 目标是否有效
-if [ ! -x /mnt/rootfs/sbin/init ]; then
-    echo "ERROR: /mnt/rootfs/sbin/init 不存在或不可执行"
-    echo "根文件系统内容:"
-    ls -la /mnt/rootfs/ 2>/dev/null
-    echo "进入紧急 Shell 调试"
-    exec /bin/sh
-fi
+# 启动 syslog
+syslogd 2>/dev/null
+klogd 2>/dev/null
 
-# 卸载临时文件系统，切换根
-umount /proc /sys /dev /run 2>/dev/null
-exec switch_root /mnt/rootfs /sbin/init
+# 串口控制台
+exec /bin/sh
+INITEOF
+    chmod +x "$INIT/init"
 INITEOF
     chmod +x "$INIT/init"
 
@@ -387,34 +562,25 @@ PYEOF
 # ─── 4. 生成 vbmeta.img（禁用 AVB 验证） ─────────────────
 build_vbmeta() {
     log "生成 vbmeta.img（禁用 dm-verity/AVB）..."
-    # 使用标准工具生成空的 vbmeta 并禁用验证
-    # 如果没有 avbtool，手动生成一个最小的 vbmeta header
-    python3 - "$OUT/vbmeta.img" <<'PYEOF'
-import struct, sys
 
-output = sys.argv[1]
+    # 前置检查 avbtool 是否可用
+    if ! command -v avbtool >/dev/null 2>&1; then
+        err "avbtool 未找到，请先执行 './scripts/build.sh deps' 安装依赖"
+    fi
 
-# Minimal vbmeta image with verification disabled
-# Header: AVB magic + version + auth/aux/vbmeta sizes = 0 (no actual chain)
-vbmeta = bytearray(256)
+    # 使用标准 AVB 工具生成禁用校验的 vbmeta 镜像
+    # --flags 3 = 同时禁用 AVB 签名验证 + dm-verity 校验
+    # --padding_size 4096 匹配高通平台分区对齐要求
+    avbtool make_vbmeta_image \
+        --output "$OUT/vbmeta.img" \
+        --flags 3 \
+        --padding_size 4096
 
-# Magic: "AVB0"
-vbmeta[0:4] = b'AVB0'
-# Required_libs (offset 4, 48 bytes) - empty
-# Header version major (offset 56)
-struct.pack_into('>Q', vbmeta, 56, 1)
-# Header version minor (offset 64)
-struct.pack_into('>Q', vbmeta, 64, 0)
-# Authentication data block size (offset 104)
-struct.pack_into('>Q', vbmeta, 104, 0)
-# Auxiliary data block size (offset 112)
-struct.pack_into('>Q', vbmeta, 112, 0)
-
-with open(output, 'wb') as f:
-    f.write(vbmeta)
-
-print(f"vbmeta.img 生成成功 -> {output} (AVB 已禁用)")
-PYEOF
+    if [ $? -eq 0 ]; then
+        log "vbmeta.img 生成成功: $OUT/vbmeta.img"
+    else
+        err "vbmeta.img 生成失败，请检查 avbtool 是否正常工作"
+    fi
 }
 
 # ─── 5. 构建 rootfs.img ───────────────────────────────────
@@ -586,11 +752,21 @@ case "${1:-all}" in
         echo "  vbmeta.img  $(du -h "$OUT/vbmeta.img" | cut -f1)"
         echo "  rootfs.img  $(du -h "$OUT/rootfs.img" | cut -f1)"
         echo ""
-        echo "刷入命令："
+        echo "刷入命令（全槽位默认方案）："
         echo "  adb reboot bootloader"
-        echo "  fastboot flash vbmeta --disable-verity --disable-verification $OUT/vbmeta.img"
+        echo "  fastboot flash vbmeta $OUT/vbmeta.img"
         echo "  fastboot flash boot $OUT/boot.img"
         echo "  fastboot flash userdata $OUT/rootfs.img"
+        echo "  fastboot reboot"
+        echo ""
+        echo "刷入命令（仅 B 槽，保留 A 槽原生安卓）："
+        echo "  adb reboot bootloader"
+        echo "  fastboot flash vbmeta_b $OUT/vbmeta.img"
+        echo "  fastboot flash boot_b $OUT/boot.img"
+        echo "  fastboot flash userdata $OUT/rootfs.img"
+        echo "  fastboot set_active b && fastboot reboot"
+        echo ""
+        echo "切回原生安卓："
         echo "  fastboot set_active a && fastboot reboot"
         ;;
     clean)    rm -rf "$BUILD"; log "已清理构建目录" ;;
