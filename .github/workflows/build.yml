@@ -51,7 +51,7 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
         env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-rootfs:
     name: Build Rootfs
@@ -80,7 +80,7 @@ jobs:
 
       - name: Download prebuilt kernel artifacts
         env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eo pipefail
           OWNER_REPO="${GITHUB_REPOSITORY}"
@@ -158,4 +158,4 @@ jobs:
           draft: false
           prerelease: true
         env:
-          GITHUB_TOKEN: *** secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

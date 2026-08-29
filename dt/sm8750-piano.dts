@@ -217,6 +217,8 @@
 	/* ── USB-C PMIC GLINK ─────────────────────────────────
 	 * OFRP recovery.fstab 确认 USB 控制器: a600000.ssusb DWC3
 	 * pmic-glink 提供 USB-C 连接器管理与 orientation 检测
+	 * TODO: 端点引用 (usb_1_dwc3_hs, usb_dp_qmpphy_out) 需确认
+	 *       sm8750.dtsi 中是否存在对应 label，不存在则删除 ports
 	 */
 	pmic-glink {
 		compatible = "qcom,sm8750-pmic-glink",
@@ -231,23 +233,6 @@
 			reg = <0>;
 			power-role = "dual";
 			data-role = "dual";
-
-			ports {
-				#address-cells = <1>;
-				#size-cells = <0>;
-				port@0 {
-					reg = <0>;
-					pmic_glink_hs_in: endpoint {
-						remote-endpoint = <&usb_1_dwc3_hs>;
-					};
-				};
-				port@1 {
-					reg = <1>;
-					pmic_glink_ss_in: endpoint {
-						remote-endpoint = <&usb_dp_qmpphy_out>;
-					};
-				};
-			};
 		};
 	};
 
